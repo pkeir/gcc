@@ -61,6 +61,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
     _Fwd_list_node_base(const _Fwd_list_node_base&) = delete;
     _Fwd_list_node_base& operator=(const _Fwd_list_node_base&) = delete;
 
+    _GLIBCXX_CEST_CONSTEXPR
     _Fwd_list_node_base&
     operator=(_Fwd_list_node_base&& __x) noexcept
     {
@@ -71,6 +72,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
     _Fwd_list_node_base* _M_next = nullptr;
 
+    _GLIBCXX_CEST_CONSTEXPR
     _Fwd_list_node_base*
     _M_transfer_after(_Fwd_list_node_base* __begin,
 		      _Fwd_list_node_base* __end) noexcept
@@ -87,6 +89,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       return __end;
     }
 
+    _GLIBCXX_CEST_CONSTEXPR
     void
     _M_reverse_after() noexcept
     {
@@ -113,14 +116,16 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
     struct _Fwd_list_node
     : public _Fwd_list_node_base
     {
-      _Fwd_list_node() = default;
+      _GLIBCXX_CEST_CONSTEXPR _Fwd_list_node() = default;
 
       __gnu_cxx::__aligned_buffer<_Tp> _M_storage;
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Tp*
       _M_valptr() noexcept
       { return _M_storage._M_ptr(); }
 
+      _GLIBCXX_CEST_CONSTEXPR
       const _Tp*
       _M_valptr() const noexcept
       { return _M_storage._M_ptr(); }
@@ -143,23 +148,28 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       typedef ptrdiff_t				difference_type;
       typedef std::forward_iterator_tag		iterator_category;
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Fwd_list_iterator() noexcept
       : _M_node() { }
 
       explicit
+      _GLIBCXX_CEST_CONSTEXPR
       _Fwd_list_iterator(_Fwd_list_node_base* __n) noexcept
       : _M_node(__n) { }
 
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       reference
       operator*() const noexcept
       { return *static_cast<_Node*>(this->_M_node)->_M_valptr(); }
 
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       pointer
       operator->() const noexcept
       { return static_cast<_Node*>(this->_M_node)->_M_valptr(); }
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Self&
       operator++() noexcept
       {
@@ -167,6 +177,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	return *this;
       }
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Self
       operator++(int) noexcept
       {
@@ -179,6 +190,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  @brief  Forward list iterator equality comparison.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       friend bool
       operator==(const _Self& __x, const _Self& __y) noexcept
       { return __x._M_node == __y._M_node; }
@@ -188,6 +200,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  @brief  Forward list iterator inequality comparison.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       friend bool
       operator!=(const _Self& __x, const _Self& __y) noexcept
       { return __x._M_node != __y._M_node; }
@@ -223,26 +236,31 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       typedef ptrdiff_t				difference_type;
       typedef std::forward_iterator_tag		iterator_category;
 
-      _Fwd_list_const_iterator() noexcept
+      _GLIBCXX_CEST_CONSTEXPR _Fwd_list_const_iterator() noexcept
       : _M_node() { }
 
       explicit
+      _GLIBCXX_CEST_CONSTEXPR
       _Fwd_list_const_iterator(const _Fwd_list_node_base* __n)  noexcept
       : _M_node(__n) { }
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Fwd_list_const_iterator(const iterator& __iter) noexcept
       : _M_node(__iter._M_node) { }
 
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       reference
       operator*() const noexcept
       { return *static_cast<_Node*>(this->_M_node)->_M_valptr(); }
 
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       pointer
       operator->() const noexcept
       { return static_cast<_Node*>(this->_M_node)->_M_valptr(); }
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Self&
       operator++() noexcept
       {
@@ -250,6 +268,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	return *this;
       }
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Self
       operator++(int) noexcept
       {
@@ -262,6 +281,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  @brief  Forward list const_iterator equality comparison.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       friend bool
       operator==(const _Self& __x, const _Self& __y) noexcept
       { return __x._M_node == __y._M_node; }
@@ -271,6 +291,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  @brief  Forward list const_iterator inequality comparison.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       friend bool
       operator!=(const _Self& __x, const _Self& __y) noexcept
       { return __x._M_node != __y._M_node; }
@@ -303,7 +324,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       {
 	_Fwd_list_node_base _M_head;
 
-	_Fwd_list_impl()
+	_GLIBCXX_CEST_CONSTEXPR _Fwd_list_impl()
 	  noexcept(is_nothrow_default_constructible<_Node_alloc_type>::value)
 	: _Node_alloc_type(), _M_head()
 	{ }
@@ -314,6 +335,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	: _Node_alloc_type(std::move(__a)), _M_head(std::move(__fl._M_head))
 	{ }
 
+	_GLIBCXX_CEST_CONSTEXPR
 	_Fwd_list_impl(_Node_alloc_type&& __a)
 	: _Node_alloc_type(std::move(__a)), _M_head()
 	{ }
@@ -326,20 +348,24 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       typedef _Fwd_list_const_iterator<_Tp>	const_iterator;
       typedef _Fwd_list_node<_Tp>		_Node;
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Node_alloc_type&
       _M_get_Node_allocator() noexcept
       { return this->_M_impl; }
 
+      _GLIBCXX_CEST_CONSTEXPR
       const _Node_alloc_type&
       _M_get_Node_allocator() const noexcept
       { return this->_M_impl; }
 
-      _Fwd_list_base() = default;
+      _GLIBCXX_CEST_CONSTEXPR _Fwd_list_base() = default;
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Fwd_list_base(_Node_alloc_type&& __a)
       : _M_impl(std::move(__a)) { }
 
       // When allocators are always equal.
+      _GLIBCXX_CEST_CONSTEXPR
       _Fwd_list_base(_Fwd_list_base&& __lst, _Node_alloc_type&& __a,
 		     std::true_type)
       : _M_impl(std::move(__lst._M_impl), std::move(__a))
@@ -350,10 +376,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
       _Fwd_list_base(_Fwd_list_base&&) = default;
 
-      ~_Fwd_list_base()
+      _GLIBCXX_CEST_CONSTEXPR ~_Fwd_list_base()
       { _M_erase_after(&_M_impl._M_head, nullptr); }
 
     protected:
+      _GLIBCXX_CEST_CONSTEXPR
       _Node*
       _M_get_node()
       {
@@ -362,6 +389,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       }
 
       template<typename... _Args>
+	_GLIBCXX_CEST_CONSTEXPR
 	_Node*
 	_M_create_node(_Args&&... __args)
 	{
@@ -382,9 +410,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	}
 
       template<typename... _Args>
+	_GLIBCXX_CEST_CONSTEXPR
 	_Fwd_list_node_base*
 	_M_insert_after(const_iterator __pos, _Args&&... __args);
 
+      _GLIBCXX_CEST_CONSTEXPR
       void
       _M_put_node(_Node* __p)
       {
@@ -393,9 +423,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	_Node_alloc_traits::deallocate(_M_get_Node_allocator(), __ptr, 1);
       }
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Fwd_list_node_base*
       _M_erase_after(_Fwd_list_node_base* __pos);
 
+      _GLIBCXX_CEST_CONSTEXPR
       _Fwd_list_node_base*
       _M_erase_after(_Fwd_list_node_base* __pos,
 		     _Fwd_list_node_base* __last);
@@ -464,7 +496,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       /**
        *  @brief  Creates a %forward_list with no elements.
        */
-      forward_list() = default;
+      _GLIBCXX_CEST_CONSTEXPR forward_list() = default;
 
       /**
        *  @brief  Creates a %forward_list with no elements.
@@ -509,6 +541,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  @param  __list  Input list to move.
        *  @param  __al    An allocator object.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       forward_list(forward_list&& __list,
 		   const __type_identity_t<_Alloc>& __al)
       noexcept(_Node_alloc_traits::_S_always_equal())
@@ -525,6 +558,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  constructed elements.
        */
       explicit
+      _GLIBCXX_CEST_CONSTEXPR
       forward_list(size_type __n, const _Alloc& __al = _Alloc())
       : _Base(_Node_alloc_type(__al))
       { _M_default_initialize(__n); }
@@ -538,6 +572,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  This constructor fills the %forward_list with @a __n copies of
        *  @a __value.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       forward_list(size_type __n, const _Tp& __value,
 		   const _Alloc& __al = _Alloc())
       : _Base(_Node_alloc_type(__al))
@@ -555,6 +590,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        */
       template<typename _InputIterator,
 	       typename = std::_RequireInputIter<_InputIterator>>
+	_GLIBCXX_CEST_CONSTEXPR
 	forward_list(_InputIterator __first, _InputIterator __last,
 		     const _Alloc& __al = _Alloc())
 	: _Base(_Node_alloc_type(__al))
@@ -565,6 +601,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  @param  __list  A %forward_list of identical element and allocator
        *                  types.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       forward_list(const forward_list& __list)
       : _Base(_Node_alloc_traits::_S_select_on_copy(
 		__list._M_get_Node_allocator()))
@@ -597,7 +634,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       /**
        *  @brief  The forward_list dtor.
        */
-      ~forward_list() noexcept
+      _GLIBCXX_CEST_CONSTEXPR ~forward_list() noexcept
       { }
 
       /**
@@ -609,6 +646,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *
        *  Whether the allocator is copied depends on the allocator traits.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       forward_list&
       operator=(const forward_list& __list);
 
@@ -664,6 +702,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        */
       template<typename _InputIterator,
 	       typename = std::_RequireInputIter<_InputIterator>>
+	_GLIBCXX_CEST_CONSTEXPR
 	void
 	assign(_InputIterator __first, _InputIterator __last)
 	{
@@ -681,6 +720,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  %forward_list, and that the resulting %forward_list has __n
        *  elements.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       void
       assign(size_type __n, const _Tp& __val)
       { _M_assign_n(__n, __val, is_copy_assignable<_Tp>()); }
@@ -693,11 +733,13 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  elements in the initializer_list @a __il.  This is linear in
        *  il.size().
        */
+      _GLIBCXX_CEST_CONSTEXPR
       void
       assign(std::initializer_list<_Tp> __il)
       { assign(__il.begin(), __il.end()); }
 
       /// Get a copy of the memory allocation object.
+      _GLIBCXX_CEST_CONSTEXPR
       allocator_type
       get_allocator() const noexcept
       { return allocator_type(this->_M_get_Node_allocator()); }
@@ -709,6 +751,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  in the %forward_list.  Iteration is done in ordinary element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       iterator
       before_begin() noexcept
       { return iterator(&this->_M_impl._M_head); }
@@ -719,6 +762,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       const_iterator
       before_begin() const noexcept
       { return const_iterator(&this->_M_impl._M_head); }
@@ -728,6 +772,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  in the %forward_list.  Iteration is done in ordinary element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       iterator
       begin() noexcept
       { return iterator(this->_M_impl._M_head._M_next); }
@@ -738,6 +783,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       const_iterator
       begin() const noexcept
       { return const_iterator(this->_M_impl._M_head._M_next); }
@@ -748,6 +794,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       iterator
       end() noexcept
       { return iterator(nullptr); }
@@ -758,6 +805,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       const_iterator
       end() const noexcept
       { return const_iterator(nullptr); }
@@ -768,6 +816,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       const_iterator
       cbegin() const noexcept
       { return const_iterator(this->_M_impl._M_head._M_next); }
@@ -778,6 +827,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       const_iterator
       cbefore_begin() const noexcept
       { return const_iterator(&this->_M_impl._M_head); }
@@ -788,6 +838,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  ordinary element order.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       const_iterator
       cend() const noexcept
       { return const_iterator(nullptr); }
@@ -797,6 +848,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  equal end().)
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       bool
       empty() const noexcept
       { return this->_M_impl._M_head._M_next == nullptr; }
@@ -805,6 +857,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  Returns the largest possible number of elements of %forward_list.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       size_type
       max_size() const noexcept
       { return _Node_alloc_traits::max_size(this->_M_get_Node_allocator()); }
@@ -816,6 +869,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  element of the %forward_list.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       reference
       front()
       {
@@ -828,6 +882,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  element of the %forward_list.
        */
       [[__nodiscard__]]
+      _GLIBCXX_CEST_CONSTEXPR
       const_reference
       front() const
       {
@@ -873,6 +928,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  can be done in constant time, and does not invalidate iterators
        *  and references.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       void
       push_front(const _Tp& __val)
       { this->_M_insert_after(cbefore_begin(), __val); }
@@ -880,6 +936,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       /**
        *
        */
+      _GLIBCXX_CEST_CONSTEXPR
       void
       push_front(_Tp&& __val)
       { this->_M_insert_after(cbefore_begin(), std::move(__val)); }
@@ -896,6 +953,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  is needed, it should be retrieved before pop_front() is
        *  called.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       void
       pop_front()
       { this->_M_erase_after(&this->_M_impl._M_head); }
@@ -932,12 +990,14 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  invalidate iterators and references.
        */
       iterator
+      _GLIBCXX_CEST_CONSTEXPR
       insert_after(const_iterator __pos, const _Tp& __val)
       { return iterator(this->_M_insert_after(__pos, __val)); }
 
       /**
        *
        */
+      _GLIBCXX_CEST_CONSTEXPR
       iterator
       insert_after(const_iterator __pos, _Tp&& __val)
       { return iterator(this->_M_insert_after(__pos, std::move(__val))); }
@@ -957,6 +1017,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  This operation is linear in the number of elements inserted and
        *  does not invalidate iterators and references.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       iterator
       insert_after(const_iterator __pos, size_type __n, const _Tp& __val);
 
@@ -977,6 +1038,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        */
       template<typename _InputIterator,
 	       typename = std::_RequireInputIter<_InputIterator>>
+	_GLIBCXX_CEST_CONSTEXPR
 	iterator
 	insert_after(const_iterator __pos,
 		     _InputIterator __first, _InputIterator __last);
@@ -996,6 +1058,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  This operation is linear in the number of elements inserted and
        *  does not invalidate iterators and references.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       iterator
       insert_after(const_iterator __pos, std::initializer_list<_Tp> __il)
       { return insert_after(__pos, __il.begin(), __il.end()); }
@@ -1018,6 +1081,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  any way.  Managing the pointer is the user's responsibility.
        */
       iterator
+      _GLIBCXX_CEST_CONSTEXPR
       erase_after(const_iterator __pos)
       { return iterator(this->_M_erase_after(const_cast<_Node_base*>
 					     (__pos._M_node))); }
@@ -1041,6 +1105,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  is the user's responsibility.
        */
       iterator
+      _GLIBCXX_CEST_CONSTEXPR
       erase_after(const_iterator __pos, const_iterator __last)
       { return iterator(this->_M_erase_after(const_cast<_Node_base*>
 					     (__pos._M_node),
@@ -1105,6 +1170,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  pointers, the pointed-to memory is not touched in any way.
        *  Managing the pointer is the user's responsibility.
        */
+      _GLIBCXX_CEST_CONSTEXPR
       void
       clear() noexcept
       { this->_M_erase_after(&this->_M_impl._M_head, nullptr); }
@@ -1321,6 +1387,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
     private:
       // Called by the range constructor to implement [23.3.4.2]/9
       template<typename _InputIterator>
+	_GLIBCXX_CEST_CONSTEXPR
 	void
 	_M_range_initialize(_InputIterator __first, _InputIterator __last);
 
@@ -1330,6 +1397,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       _M_fill_initialize(size_type __n, const value_type& __value);
 
       // Called by splice_after and insert_after.
+      _GLIBCXX_CEST_CONSTEXPR
       iterator
       _M_splice_after(const_iterator __pos, const_iterator __before,
 		      const_iterator __last);
@@ -1391,6 +1459,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       // Called by assign(_InputIterator, _InputIterator) if _Tp is not
       // CopyAssignable.
       template<typename _InputIterator>
+	_GLIBCXX_CEST_CONSTEXPR
 	void
 	_M_assign(_InputIterator __first, _InputIterator __last, false_type)
 	{
