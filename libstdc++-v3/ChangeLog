@@ -1,3 +1,127 @@
+2022-04-26  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/shared_ptr_atomic.h (atomic<shared_ptr>): Add
+	constructor for constant initialization from nullptr_t.
+	* testsuite/20_util/shared_ptr/atomic/atomic_shared_ptr.cc:
+	Check for new constructor.
+
+2022-04-26  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/fs_path.h (hash<filesystem::path>): Define.
+	* testsuite/27_io/filesystem/path/nonmember/hash_value.cc:
+	Check std::hash specialization.
+
+2022-04-25  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/ptr_traits.h (__cpp_lib_constexpr_memory): Define
+	conditionally.
+	* include/bits/unique_ptr.h (__cpp_lib_constexpr_memory):
+	Define for C++23.
+	(default_delete, default_delete<T[]>, __uniq_ptr_impl)
+	(unique_ptr, unique_ptr<T[], D>): Add constexpr to all member
+	functions.
+	* include/std/version (__cpp_lib_constexpr_memory): Define new
+	value for C++23.
+	* testsuite/20_util/unique_ptr/assign/constexpr.cc: New test.
+	* testsuite/20_util/unique_ptr/comparison/constexpr.cc: New test.
+	* testsuite/20_util/unique_ptr/cons/constexpr_c++20.cc: New test.
+	* testsuite/20_util/unique_ptr/creation/constexpr.cc: New test.
+	* testsuite/20_util/unique_ptr/modifiers/constexpr.cc: New test.
+	* testsuite/20_util/unique_ptr/specialized_algorithms/constexpr.cc:
+	New test.
+
+2022-04-25  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/105375
+	* include/std/future (packaged_task): Add deduction guides.
+	* testsuite/30_threads/packaged_task/cons/deduction.cc: New test.
+
+2022-04-25  Philipp Fent  <fent@in.tum.de>
+
+	* python/libstdcxx/v6/printers.py (StdSpanPrinter._iterator):
+	Rename as iterator.
+	(StdInitializerListPrinter): Define new printer.
+	(build_libstdcxx_dictionary): Register new printer.
+	* testsuite/libstdc++-prettyprinters/cxx11.cc: Check printer for
+	initializer_list.
+
+2022-04-22  Thomas W Rodgers  <trodgers@redhat.com>
+
+	PR libstdc++/102994
+	* include/bits/atomic_base.h (atomic_flag::notify_one,
+	notify_all): Remove const qualification.
+	(__atomic_base::notify_one, notify_all): Likewise.
+	* include/std/atomic (atomic<bool>::notify_one, notify_all):
+	Likewise.
+	(atomic::notify_one, notify_all): Likewise.
+	(atomic<T*>::notify_one, notify_all): Likewise.
+	(atomic_notify_one, atomic_notify_all): Likewise.
+	* testsuite/29_atomics/atomic/wait_notify/102994.cc: Adjust test
+	to account for change in notify_one/notify_all signature.
+
+2022-04-21  Patrick Palka  <ppalka@redhat.com>
+
+	* include/std/charconv (__from_chars_alnum_to_val_table):
+	Simplify initialization of __lower/__upper_letters.
+	(__from_chars_alnum_to_val): Default the template parameter to
+	false.
+	* src/c++17/floating_from_chars.cc (starts_with_ci): Don't
+	assume the uppercase and lowercase letters are contiguous.
+	(__floating_from_chars_hex): Likewise.
+
+2022-04-21  Patrick Palka  <ppalka@redhat.com>
+
+	PR c++/105297
+	PR c++/105322
+	* include/std/charconv (__from_chars_alnum_to_val): Make
+	initializer for __table dependent in an artificial way.
+
+2022-04-21  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/105324
+	* src/c++17/floating_from_chars.cc (buffer_resource::do_allocate):
+	Remove assertion.
+	* testsuite/20_util/from_chars/pr105324.cc: New test.
+
+2022-04-20  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/21_strings/basic_string_view/operations/copy/char/constexpr.cc:
+	Check correct feature test macro.
+
+2022-04-20  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/93602
+	* doc/xml/manual/prerequisites.xml: Document libiconv
+	workarounds.
+	* doc/html/manual/setup.html: Regenerate.
+	* src/Makefile.am (CXXLINK): Add $(LTLIBICONV).
+	* src/Makefile.in: Regenerate.
+
+2022-04-19  Patrick Palka  <ppalka@redhat.com>
+
+	* src/c++17/floating_to_chars.cc (_GLIBCXX_ASSERTIONS): Don't
+	define.
+	(__floating_to_chars_shortest): Add __builtin_unreachable calls to
+	squelch false-positive -Wmaybe-uninitialized and -Wreturn-type
+	warnings.
+	(__floating_to_chars_precision): Likewise.
+
+2022-04-19  Philipp Fent  <fent@in.tum.de>
+
+	* python/libstdcxx/v6/printers.py (StdSpanPrinter): Define.
+	* testsuite/libstdc++-prettyprinters/cxx20.cc: Test it.
+
+2022-04-19  Jonathan Wakely  <jwakely@redhat.com>
+
+	* acinclude.m4 (GLIBCXX_ENABLE_BACKTRACE): Fix shell operators.
+	* configure: Regenerate.
+
+2022-04-18  Patrick Palka  <ppalka@redhat.com>
+
+	* include/std/charconv (__from_chars_pow2_base): Manually
+	unroll the first iteration of the main loop and simplify
+	accordingly.
+
 2022-04-15  Patrick Palka  <ppalka@redhat.com>
 
 	PR libstdc++/104858

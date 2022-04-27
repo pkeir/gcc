@@ -4341,7 +4341,9 @@ check_for_bare_parameter_packs (tree t, location_t loc /* = UNKNOWN_LOCATION */)
 	 parameter_packs = TREE_CHAIN (parameter_packs))
       {
 	tree pack = TREE_VALUE (parameter_packs);
-	if (is_capture_proxy (pack))
+	if (is_capture_proxy (pack)
+	    || (TREE_CODE (pack) == PARM_DECL
+		&& DECL_CONTEXT (DECL_CONTEXT (pack)) == lam))
 	  break;
       }
 
@@ -5227,8 +5229,9 @@ process_partial_specialization (tree decl)
 	   && !get_partial_spec_bindings (maintmpl, maintmpl, specargs))
     {
       auto_diagnostic_group d;
-      if (permerror (input_location, "partial specialization %qD is not "
-		     "more specialized than", decl))
+      if (pedwarn (input_location, 0,
+		   "partial specialization %qD is not more specialized than",
+		   decl))
 	inform (DECL_SOURCE_LOCATION (maintmpl), "primary template %qD",
 		maintmpl);
     }
@@ -12679,7 +12682,13 @@ gen_elem_of_pack_expansion_instantiation (tree pattern,
     t = tsubst_expr (pattern, args, complain, in_decl,
 		     /*integral_constant_expression_p=*/false);
   else
-    t = tsubst (pattern, args, complain, in_decl);
+    {
+      t = tsubst (pattern, args, complain, in_decl);
+      if (is_auto (t) && !ith_elem_is_expansion)
+	/* When expanding the fake auto... pack expansion from add_capture, we
+	   need to mark that the expansion is no longer a pack.  */
+	TEMPLATE_TYPE_PARAMETER_PACK (t) = false;
+    }
 
   /*  If the Ith argument pack element is a pack expansion, then
       the Ith element resulting from the substituting is going to
@@ -24299,7 +24308,7 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
 	      /* Now check whether the type of this parameter is still
 		 dependent, and give up if so.  */
 	      ++processing_template_decl;
-	      tparm = tsubst (tparm, targs, tf_none, NULL_TREE);
+	      tparm = tsubst (TREE_TYPE (parm), targs, tf_none, NULL_TREE);
 	      --processing_template_decl;
 	      if (uses_template_parms (tparm))
 		return unify_success (explain_p);
