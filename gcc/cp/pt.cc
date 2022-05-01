@@ -10905,7 +10905,7 @@ uses_template_parms (tree t)
 		   || uses_template_parms (TREE_CHAIN (t)));
   else if (TREE_CODE (t) == TYPE_DECL)
     dependent_p = dependent_type_p (TREE_TYPE (t));
-  else if (t == error_mark_node)
+  else if (t == error_mark_node || TREE_CODE (t) == NAMESPACE_DECL)
     dependent_p = false;
   else
     dependent_p = instantiation_dependent_expression_p (t);
@@ -13730,8 +13730,8 @@ tsubst_aggr_type (tree t,
 					 complain, in_decl);
 	  if (argvec == error_mark_node)
 	    r = error_mark_node;
-	  else if (!entering_scope
-		   && cxx_dialect >= cxx17 && dependent_scope_p (context))
+	  else if (!entering_scope && (complain & tf_dguide)
+		   && dependent_scope_p (context))
 	    {
 	      /* See maybe_dependent_member_ref.  */
 	      tree name = TYPE_IDENTIFIER (t);
@@ -16497,7 +16497,7 @@ tsubst_baselink (tree baselink, tree object_type,
 	name = make_conv_op_name (optype);
 
       /* See maybe_dependent_member_ref.  */
-      if (dependent_scope_p (qualifying_scope))
+      if ((complain & tf_dguide) && dependent_scope_p (qualifying_scope))
 	{
 	  if (template_id_p)
 	    name = build2 (TEMPLATE_ID_EXPR, unknown_type_node, name,
@@ -16817,7 +16817,7 @@ static tree
 maybe_dependent_member_ref (tree t, tree args, tsubst_flags_t complain,
 			    tree in_decl)
 {
-  if (cxx_dialect < cxx17)
+  if (!(complain & tf_dguide))
     return NULL_TREE;
 
   tree ctx = context_for_name_lookup (t);
@@ -17075,7 +17075,7 @@ tsubst_copy (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 	     have to substitute this with one having context `D<int>'.  */
 
 	  tree context = tsubst (DECL_CONTEXT (t), args, complain, in_decl);
-	  if (dependent_scope_p (context))
+	  if ((complain & tf_dguide) && dependent_scope_p (context))
 	    {
 	      /* When rewriting a constructor into a deduction guide, a
 		 non-dependent name can become dependent, so memtmpl<args>
@@ -21715,6 +21715,21 @@ instantiate_alias_template (tree tmpl, tree args, tsubst_flags_t complain)
   if (tmpl == error_mark_node || args == error_mark_node)
     return error_mark_node;
 
+  /* See maybe_dependent_member_ref.  */
+  if (complain & tf_dguide)
+    {
+      tree ctx = tsubst_aggr_type (DECL_CONTEXT (tmpl), args, complain,
+				   tmpl, true);
+      if (dependent_scope_p (ctx))
+	{
+	  tree name = DECL_NAME (tmpl);
+	  tree fullname = build_nt (TEMPLATE_ID_EXPR, name,
+				    INNERMOST_TEMPLATE_ARGS (args));
+	  tree tname = build_typename_type (ctx, name, fullname, typename_type);
+	  return TYPE_NAME (tname);
+	}
+    }
+
   args =
     coerce_innermost_template_parms (DECL_TEMPLATE_PARMS (tmpl),
 				     args, tmpl, complain,
@@ -24276,7 +24291,8 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
 	    }
 	}
 
-      if (!TREE_TYPE (arg))
+      if (!TREE_TYPE (arg)
+	  || TREE_CODE (TREE_TYPE (arg)) == DEPENDENT_OPERATOR_TYPE)
 	/* Template-parameter dependent expression.  Just accept it for now.
 	   It will later be processed in convert_template_argument.  */
 	;
@@ -29277,6 +29293,8 @@ build_deduction_guide (tree type, tree ctor, tree outer_args, tsubst_flags_t com
     {
       ++processing_template_decl;
       bool ok = true;
+
+      complain |= tf_dguide;
 
       fn_tmpl
 	= (TREE_CODE (ctor) == TEMPLATE_DECL ? ctor
