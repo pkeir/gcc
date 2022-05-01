@@ -62,6 +62,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
   template<typename _Tp, typename _Alloc>
+    _GLIBCXX_CEST_CONSTEXPR
     void
     _List_base<_Tp, _Alloc>::
     _M_clear() _GLIBCXX_NOEXCEPT
@@ -78,6 +79,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 #else
 	  _Tp_alloc_type(_M_get_Node_allocator()).destroy(__val);
 #endif
+#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
+	  std::destroy_at(__tmp); // Like ~_Node(): _Fwd_list_base::_M_erase_after
+#endif
 	  _M_put_node(__tmp);
 	}
     }
@@ -85,6 +89,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 #if __cplusplus >= 201103L
   template<typename _Tp, typename _Alloc>
     template<typename... _Args>
+      _GLIBCXX_CEST_CONSTEXPR
       typename list<_Tp, _Alloc>::iterator
       list<_Tp, _Alloc>::
       emplace(const_iterator __position, _Args&&... __args)
@@ -97,6 +102,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 #endif
 
   template<typename _Tp, typename _Alloc>
+    _GLIBCXX_CEST_CONSTEXPR
     typename list<_Tp, _Alloc>::iterator
     list<_Tp, _Alloc>::
 #if __cplusplus >= 201103L
@@ -113,6 +119,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
 #if __cplusplus >= 201103L
   template<typename _Tp, typename _Alloc>
+    _GLIBCXX_CEST_CONSTEXPR
     typename list<_Tp, _Alloc>::iterator
     list<_Tp, _Alloc>::
     insert(const_iterator __position, size_type __n, const value_type& __x)
@@ -129,6 +136,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
   template<typename _Tp, typename _Alloc>
     template<typename _InputIterator, typename>
+      _GLIBCXX_CEST_CONSTEXPR
       typename list<_Tp, _Alloc>::iterator
       list<_Tp, _Alloc>::
       insert(const_iterator __position, _InputIterator __first,
@@ -146,6 +154,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 #endif
 
   template<typename _Tp, typename _Alloc>
+    _GLIBCXX_CEST_CONSTEXPR
     typename list<_Tp, _Alloc>::iterator
     list<_Tp, _Alloc>::
 #if __cplusplus >= 201103L
@@ -263,6 +272,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 #endif
 
   template<typename _Tp, typename _Alloc>
+    _GLIBCXX_CEST_CONSTEXPR
     list<_Tp, _Alloc>&
     list<_Tp, _Alloc>::
     operator=(const list& __x)
@@ -304,6 +314,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
   template<typename _Tp, typename _Alloc>
     template <typename _InputIterator>
+      _GLIBCXX_CEST_CONSTEXPR
       void
       list<_Tp, _Alloc>::
       _M_assign_dispatch(_InputIterator __first2, _InputIterator __last2,

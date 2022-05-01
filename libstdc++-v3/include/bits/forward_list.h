@@ -116,7 +116,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
     struct _Fwd_list_node
     : public _Fwd_list_node_base
     {
-      _GLIBCXX_CEST_CONSTEXPR _Fwd_list_node() = default;
+      _Fwd_list_node() = default;
 
       __gnu_cxx::__aligned_buffer<_Tp> _M_storage;
 

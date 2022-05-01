@@ -404,7 +404,7 @@ _GLIBCXX_END_NAMESPACE_VERSION
 #include <bits/compatibility.h>
 #undef _GLIBCXX_APPLY_SYMVER
 
-
+#if !_GLIBCXX_CEST_VERSION
 /* gcc-3.4.0
 _ZN10__gnu_norm15_List_node_base4hookEPS0_;
 _ZN10__gnu_norm15_List_node_base4swapERS0_S1_;
@@ -432,6 +432,7 @@ GLIBCXX_3.4)
 _GLIBCXX_ASM_SYMVER(_ZNSt8__detail17_List_node_baseXX11_M_transferEPS0_S1_, \
 _ZN10__gnu_norm15_List_node_base8transferEPS0_S1_, \
 GLIBCXX_3.4)
+#endif
 #undef _List_node_base
 
 // gcc-4.1.0

@@ -33,6 +33,9 @@
 
 #if __cplusplus >= 201103L
 # include <type_traits>
+# if _GLIBCXX_CEST_VERSION
+#  include <bits/allocator.h>
+# endif
 #else
 # include <bits/c++0x_warning.h>
 #endif
@@ -125,7 +128,7 @@ namespace __gnu_cxx
       { return _M_storage_ptr; }
     };
 
-#if _GLIBCXX_CEST_VERSION
+#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
   template<typename _Tp>
     using __aligned_buffer = __constexpr_buffer<_Tp>;
 #elif _GLIBCXX_INLINE_VERSION

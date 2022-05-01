@@ -282,6 +282,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Alloc, bool = __is_empty(_Alloc)>
     struct __alloc_neq
     {
+      _GLIBCXX_CEST_CONSTEXPR
       static bool
       _S_do_it(const _Alloc&, const _Alloc&)
       { return false; }
