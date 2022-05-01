@@ -142,7 +142,7 @@ am__objects_7 = bitmap_allocator.lo pool_allocator.lo mt_allocator.lo \
 	list-aux.lo list-aux-2.lo list_associated.lo \
 	list_associated-2.lo locale.lo locale_init.lo locale_facets.lo \
 	localename.lo math_stubs_float.lo math_stubs_long_double.lo \
-	stdexcept.lo strstream.lo tree.lo istream.lo istream-string.lo \
+	stdexcept.lo strstream.lo istream.lo istream-string.lo \
 	streambuf.lo valarray.lo $(am__objects_1) $(am__objects_3) \
 	$(am__objects_6)
 am_libc__98convenience_la_OBJECTS = $(am__objects_7)
@@ -511,7 +511,6 @@ sources = \
 	math_stubs_long_double.cc \
 	stdexcept.cc \
 	strstream.cc \
-	tree.cc \
 	istream.cc \
 	istream-string.cc \
 	streambuf.cc \
