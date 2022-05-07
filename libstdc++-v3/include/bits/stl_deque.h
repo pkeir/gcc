@@ -903,6 +903,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       typedef _Alloc					allocator_type;
 
     private:
+      _GLIBCXX_CEST_CONSTEXPR
       static size_t _S_buffer_size() _GLIBCXX_NOEXCEPT
       { return __deque_buf_size(sizeof(_Tp)); }
 
