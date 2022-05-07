@@ -1,3 +1,213 @@
+2022-05-06  Jason Merrill  <jason@redhat.com>
+
+	* g++.dg/diagnostic/function-color1.C: New test.
+
+2022-05-06   Michael Meissner  <meissner@linux.ibm.com>
+
+	PR target/102059
+	* gcc.target/powerpc/pr102059-4.c: New test.
+
+2022-05-06  Hafiz Abid Qadeer  <abidh@codesourcery.com>
+
+	* c-c++-common/gomp/allocate-2.c: Add tests.
+	* c-c++-common/gomp/allocate-8.c: New test.
+	* gfortran.dg/gomp/allocate-3.f90: Add tests.
+	* gcc.dg/gomp/pr104517.c: Update.
+
+2022-05-05  Marek Polacek  <polacek@redhat.com>
+
+	PR c++/64679
+	* g++.dg/parse/ambig11.C: New test.
+	* g++.dg/parse/ambig12.C: New test.
+	* g++.dg/parse/ambig13.C: New test.
+	* g++.dg/parse/ambig14.C: New test.
+
+2022-05-05  Uroš Bizjak  <ubizjak@gmail.com>
+
+	* gcc.target/i386/pr103611-2.c (dg-do): Compile for target ia32.
+	(dg-options): Remove -m32.
+	* gcc.target/i386/pr105032.c (dg-do): Compile for taget ia32.
+	(dg-additional-options): Remove.
+	* gcc.target/i386/pr104732.c (dg-options): Remove -m32.
+	* gcc.target/i386/pr99753.c (dg-options): Ditto.
+
+2022-05-05  Sandra Loosemore  <sandra@codesourcery.com>
+
+	* c-c++-common/gomp/loop-6.c (f3): New function to test TASKLOOP
+	diagnostics.
+	* gfortran.dg/gomp/collapse1.f90: Update expected messages.
+	* gfortran.dg/gomp/pr85313.f90: Remove dg-error on non-rectangular
+	loops that are now accepted.
+	* gfortran.dg/gomp/non-rectangular-loop.f90: New file.
+	* gfortran.dg/gomp/canonical-loop-1.f90: New file.
+	* gfortran.dg/gomp/canonical-loop-2.f90: New file.
+
+2022-05-05  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/104162
+	* gcc.dg/tree-ssa/ssa-fre-99.c: New testcase.
+	* gcc.dg/asan/pr99673.c: Adjust.
+
+2022-05-05  Roger Sayle  <roger@nextmovesoftware.com>
+
+	PR testsuite/105486
+	* gcc.dg/pr102950.c: Use explicit "signed char" in test case.
+
+2022-05-05  Richard Biener  <rguenther@suse.de>
+
+	PR testsuite/105486
+	* gcc.dg/vect/bb-slp-pr104240.c: Align all data.
+
+2022-05-05  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/105484
+	* gcc.dg/torture/pr105484.c: New testcase.
+
+2022-05-05  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/104595
+	* gcc.dg/vect/pr104595.c: New testcase.
+
+2022-05-04  Patrick Palka  <ppalka@redhat.com>
+
+	PR c++/105476
+	* g++.dg/cpp2a/class-deduction-aggr13.C: New test.
+	* g++.dg/cpp2a/class-deduction-aggr13a.C: New test.
+
+2022-05-04  Marek Polacek  <polacek@redhat.com>
+
+	* c-c++-common/Wconversion-1.c: New test.
+
+2022-05-04  Marek Polacek  <polacek@redhat.com>
+
+	PR c++/64679
+	* g++.dg/parse/functor1.C: New test.
+
+2022-05-04  Marek Polacek  <polacek@redhat.com>
+
+	PR c++/105436
+	* g++.dg/parse/template31.C: New test.
+
+2022-05-04  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/104658
+	* gcc.target/i386/pr104658.c: New testcase.
+
+2022-05-04  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/103116
+	* gcc.dg/vect/pr103116-1.c: New testcase.
+	* gcc.dg/vect/pr103116-2.c: Likewise.
+
+2022-05-04  Martin Liska  <mliska@suse.cz>
+
+	* c-c++-common/asan/alloca_loop_unpoisoning.c: Do not combine
+	fake and real stack.
+
+2022-05-04  Jakub Jelinek  <jakub@redhat.com>
+
+	* g++.dg/cpp23/lambda-attr1.C: New test.
+	* g++.dg/cpp23/lambda-attr2.C: New test.
+
+2022-05-04  Martin Liska  <mliska@suse.cz>
+
+	* c-c++-common/hwasan/alloca-outside-caught.c: Update dg-output.
+	* c-c++-common/hwasan/heap-overflow.c: Likewise.
+	* c-c++-common/hwasan/hwasan-thread-access-parent.c: Likewise.
+	* c-c++-common/hwasan/large-aligned-1.c: Likewise.
+	* c-c++-common/hwasan/stack-tagging-basic-1.c: Likewise.
+
+2022-05-03  Patrick Palka  <ppalka@redhat.com>
+
+	PR c++/105351
+	* g++.dg/template/sfinae33.C: New test.
+
+2022-05-03  Dimitar Dimitrov  <dimitar@dinux.eu>
+
+	* gcc.c-torture/compile/attr-complex-method-2.c: Accept both __divdc3
+	and __gnu_divdc3 as valid libgcc function names.
+	* gcc.dg/complex-6.c: Ditto for __mulsc3.
+	* gcc.dg/complex-7.c: Ditto for __muldc3.
+
+2022-05-03  Dimitar Dimitrov  <dimitar@dinux.eu>
+
+	* gcc.dg/memchr.c: Skip for default_packed targets.
+	* gcc.dg/memcmp-3.c: Ditto.
+
+2022-05-03  Dimitar Dimitrov  <dimitar@dinux.eu>
+
+	* gcc.dg/Wattributes-8.c: Add annotations for default_packed
+	targets.
+
+2022-05-03  Dimitar Dimitrov  <dimitar@dinux.eu>
+
+	* gcc.dg/lower-subreg-1.c: Skip for PRU.
+
+2022-05-03  Dimitar Dimitrov  <dimitar@dinux.eu>
+
+	* gcc.dg/Wno-frame-address.c: Skip for PRU target.
+
+2022-05-03  Roger Sayle  <roger@nextmovesoftware.com>
+
+	PR tree-optimization/102950
+	* gcc.dg/pr102950.c: New test case.
+	* gcc.dg/tree-ssa/evrp10.c: New test case.
+
+2022-05-03  Uroš Bizjak  <ubizjak@gmail.com>
+
+	PR target/105079
+	* gcc.target/i386/pr105079.c: New test.
+	* gcc.target/i386/pr95483-1.c (dg-options): Use -msse4.1.
+
+2022-05-03  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/105461
+	* gcc.dg/pr105461.c: New testcase.
+
+2022-05-03  Alexandre Oliva  <oliva@adacore.com>
+
+	* gcc.dg/vect/costmodel/ppc/costmodel-vect-31a.c: Update
+	the expected message for the case in which unaligned accesses
+	are not allowed.
+
+2022-05-02  Jason Merrill  <jason@redhat.com>
+
+	* g++.dg/cpp2a/lambda-pack-init7.C: Check column number.
+
+2022-05-02  Jason Merrill  <jason@redhat.com>
+
+	* g++.dg/lookup/name-clash13.C: New test.
+	* g++.dg/lookup/name-clash14.C: New test.
+	* g++.dg/lookup/name-clash15.C: New test.
+	* g++.dg/lookup/name-clash16.C: New test.
+
+2022-05-02  H.J. Lu  <hjl.tools@gmail.com>
+
+	PR testsuite/105433
+	* gcc.target/i386/iamcu/asm-support.S: Add .note.GNU-stack.
+	* gcc.target/x86_64/abi/asm-support.S: Likewise.
+	* gcc.target/x86_64/abi/avx/asm-support.S: Likewise.
+	* gcc.target/x86_64/abi/avx512f/asm-support.S: Likewise.
+	* gcc.target/x86_64/abi/avx512fp16/asm-support.S: Likewise.
+	* gcc.target/x86_64/abi/avx512fp16/m256h/asm-support.S: Likewise.
+	* gcc.target/x86_64/abi/avx512fp16/m512h/asm-support.S: Likewise.
+	* gcc.target/x86_64/abi/ms-sysv/do-test.S: Likewise.
+
+2022-05-02  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/104240
+	* gcc.dg/vect/bb-slp-pr104240.c: New testcase.
+
+2022-05-02  Jakub Jelinek  <jakub@redhat.com>
+
+	PR debug/105415
+	* gcc.dg/pr105415.c: New test.
+
+2022-05-02  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/105437
+	* g++.dg/vect/pr105437.cc: New testcase.
+
 2022-04-30  Jason Merrill  <jason@redhat.com>
 
 	PR c/100545
