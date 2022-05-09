@@ -65,10 +65,6 @@
 #include <ext/aligned_buffer.h>
 #endif
 
-#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
-#include <bits/stl_construct.h> // construct_at
-#endif
-
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
@@ -565,12 +561,24 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       _GLIBCXX_CEST_CONSTEXPR
       typename _Node_alloc_traits::pointer
       _M_get_node()
-      { return _Node_alloc_traits::allocate(_M_impl, 1); }
+      {
+        typename _Node_alloc_traits::pointer __p =
+          _Node_alloc_traits::allocate(_M_impl, 1);
+#if _GLIBCXX_CEST_VERSION
+        _Node_alloc_traits::construct(_M_impl, __p);
+#endif
+        return __p;
+      }
 
       _GLIBCXX_CEST_CONSTEXPR
       void
       _M_put_node(typename _Node_alloc_traits::pointer __p) _GLIBCXX_NOEXCEPT
-      { _Node_alloc_traits::deallocate(_M_impl, __p, 1); }
+      {
+#if _GLIBCXX_CEST_VERSION
+        _Node_alloc_traits::destroy(_M_impl, __p);
+#endif
+        _Node_alloc_traits::deallocate(_M_impl, __p, 1);
+      }
 
   public:
       typedef _Alloc allocator_type;
@@ -769,9 +777,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	_M_create_node(_Args&&... __args)
 	{
 	  auto __p = this->_M_get_node();
-#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
-	  std::construct_at(__p); // Like plac't new: _Fwd_list_base::_M_create_node
-#endif
 	  auto& __alloc = _M_get_Node_allocator();
 	  __allocated_ptr<_Node_alloc_type> __guard{__alloc, __p};
 	  _Node_alloc_traits::construct(__alloc, __p->_M_valptr(),
@@ -2150,9 +2155,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	_Node_alloc_traits::destroy(_M_get_Node_allocator(), __n->_M_valptr());
 #else
 	_Tp_alloc_type(_M_get_Node_allocator()).destroy(__n->_M_valptr());
-#endif
-#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
-	std::destroy_at(__n); // As in _M_clear
 #endif
 
 	_M_put_node(__n);

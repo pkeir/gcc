@@ -67,10 +67,6 @@
 # include <compare>
 #endif
 
-#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
-# include <bits/stl_construct.h> // construct_at
-#endif
-
 #include <debug/assertions.h>
 
 namespace std _GLIBCXX_VISIBILITY(default)
@@ -654,9 +650,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       {
 	_Map_alloc_type __map_alloc = _M_get_map_allocator();
 	_Map_pointer __p = _Map_alloc_traits::allocate(__map_alloc, __n);
-#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
-	for (size_t __i = 0; __i < __n; ++__i)
-	  std::construct_at(__p + __i);
+#if _GLIBCXX_CEST_VERSION
+	if (__builtin_is_constant_evaluated())
+	  for (size_t __i = 0; __i < __n; ++__i)
+	    _Map_alloc_traits::construct(__map_alloc, __p + __i);
 #endif
 	return __p;
       }
@@ -665,11 +662,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       void
       _M_deallocate_map(_Map_pointer __p, size_t __n) _GLIBCXX_NOEXCEPT
       {
-#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
-	for (size_t __i = 0; __i < __n; ++__i)
-	  std::destroy_at(__p + __i);
-#endif
 	_Map_alloc_type __map_alloc = _M_get_map_allocator();
+#if _GLIBCXX_CEST_VERSION
+	if (__builtin_is_constant_evaluated())
+	  for (size_t __i = 0; __i < __n; ++__i)
+	    _Map_alloc_traits::destroy(__map_alloc, __p + __i);
+#endif
 	_Map_alloc_traits::deallocate(__map_alloc, __p, __n);
       }
 

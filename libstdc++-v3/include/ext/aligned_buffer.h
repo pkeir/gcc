@@ -128,7 +128,7 @@ namespace __gnu_cxx
       { return _M_storage_ptr; }
     };
 
-#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
+#if _GLIBCXX_CEST_VERSION
   template<typename _Tp>
     using __aligned_buffer = __constexpr_buffer<_Tp>;
 #elif _GLIBCXX_INLINE_VERSION

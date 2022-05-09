@@ -79,9 +79,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 #else
 	  _Tp_alloc_type(_M_get_Node_allocator()).destroy(__val);
 #endif
-#if _GLIBCXX_CEST_VERSION && __cplusplus >= 202002L
-	  std::destroy_at(__tmp); // Like ~_Node(): _Fwd_list_base::_M_erase_after
-#endif
 	  _M_put_node(__tmp);
 	}
     }
