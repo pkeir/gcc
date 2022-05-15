@@ -101,12 +101,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _CharT, typename _Traits>
+    _GLIBCXX_CEST_CONSTEXPR
     basic_ostream<_CharT, _Traits>&
     basic_ostream<_CharT, _Traits>::
     operator<<(int __n)
     {
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 117. basic_ostream uses nonexistent num_put member functions.
+#if _GLIBCXX_CEST_VERSION
+      if (__builtin_is_constant_evaluated())
+        return *this;
+#endif
       const ios_base::fmtflags __fmt = this->flags() & ios_base::basefield;
       if (__fmt == ios_base::oct || __fmt == ios_base::hex)
 	return _M_insert(static_cast<long>(static_cast<unsigned int>(__n)));
@@ -144,6 +149,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _CharT, typename _Traits>
+    _GLIBCXX_CEST_CONSTEXPR
     basic_ostream<_CharT, _Traits>&
     basic_ostream<_CharT, _Traits>::
     put(char_type __c)
@@ -154,26 +160,30 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // DR 63. Exception-handling policy for unformatted output.
       // Unformatted output functions should catch exceptions thrown
       // from streambuf members.
+#if _GLIBCXX_CEST_VERSION
+      if (__builtin_is_constant_evaluated())
+        return *this;
+#endif
       sentry __cerb(*this);
       if (__cerb)
-	{
-	  ios_base::iostate __err = ios_base::goodbit;
-	  __try
-	    {
-	      const int_type __put = this->rdbuf()->sputc(__c);
-	      if (traits_type::eq_int_type(__put, traits_type::eof()))
-		__err |= ios_base::badbit;
-	    }
-	  __catch(__cxxabiv1::__forced_unwind&)
-	    {
-	      this->_M_setstate(ios_base::badbit);		
-	      __throw_exception_again;
-	    }
-	  __catch(...)
-	    { this->_M_setstate(ios_base::badbit); }
-	  if (__err)
-	    this->setstate(__err);
-	}
+  {
+    ios_base::iostate __err = ios_base::goodbit;
+    __try
+      {
+        const int_type __put = this->rdbuf()->sputc(__c);
+        if (traits_type::eq_int_type(__put, traits_type::eof()))
+    __err |= ios_base::badbit;
+      }
+    __catch(__cxxabiv1::__forced_unwind&)
+      {
+        this->_M_setstate(ios_base::badbit);		
+        __throw_exception_again;
+      }
+    __catch(...)
+      { this->_M_setstate(ios_base::badbit); }
+    if (__err)
+      this->setstate(__err);
+  }
       return *this;
     }
 
@@ -212,6 +222,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _CharT, typename _Traits>
+    _GLIBCXX_CEST_CONSTEXPR
     basic_ostream<_CharT, _Traits>&
     basic_ostream<_CharT, _Traits>::
     flush()
@@ -221,28 +232,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // basic_ostream::flush() is *not* an unformatted output function.
       // 581. flush() not unformatted function
       // basic_ostream::flush() *is* an unformatted output function.
+#if _GLIBCXX_CEST_VERSION
+      if (__builtin_is_constant_evaluated())
+        return *this;
+#endif
       if (__streambuf_type* __buf = this->rdbuf())
-	{
-	  sentry __cerb(*this);
-	  if (__cerb)
-	    {
-	      ios_base::iostate __err = ios_base::goodbit;
-	      __try
-		{
-		  if (this->rdbuf()->pubsync() == -1)
-		    __err |= ios_base::badbit;
-		}
-	      __catch(__cxxabiv1::__forced_unwind&)
-		{
-		  this->_M_setstate(ios_base::badbit);
-		  __throw_exception_again;
-		}
-	      __catch(...)
-		{ this->_M_setstate(ios_base::badbit); }
-	      if (__err)
-		this->setstate(__err);
-	    }
-	}
+  {
+    sentry __cerb(*this);
+    if (__cerb)
+      {
+        ios_base::iostate __err = ios_base::goodbit;
+        __try
+    {
+      if (this->rdbuf()->pubsync() == -1)
+        __err |= ios_base::badbit;
+    }
+        __catch(__cxxabiv1::__forced_unwind&)
+    {
+      this->_M_setstate(ios_base::badbit);
+      __throw_exception_again;
+    }
+        __catch(...)
+    { this->_M_setstate(ios_base::badbit); }
+        if (__err)
+    this->setstate(__err);
+      }
+    }
       return *this;
     }
 
