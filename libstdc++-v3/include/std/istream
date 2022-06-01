@@ -55,7 +55,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *  derived from basic_streambuf to do the actual input.
   */
   template<typename _CharT, typename _Traits>
+#if _GLIBCXX_CEST_VERSION
+    class basic_istream : public basic_ostream<_CharT, _Traits>
+#else
     class basic_istream : virtual public basic_ios<_CharT, _Traits>
+#endif
     {
     public:
       // Types (inherited from basic_ios (27.4.4)):
@@ -69,6 +73,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       typedef basic_streambuf<_CharT, _Traits> 		__streambuf_type;
       typedef basic_ios<_CharT, _Traits>		__ios_type;
       typedef basic_istream<_CharT, _Traits>		__istream_type;
+#if _GLIBCXX_CEST_VERSION
+      typedef basic_ostream<_CharT, _Traits>		__ostream_type;
+#endif
       typedef num_get<_CharT, istreambuf_iterator<_CharT, _Traits> >
  							__num_get_type;
       typedef ctype<_CharT>	      			__ctype_type;
@@ -91,7 +98,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       */
       explicit
       basic_istream(__streambuf_type* __sb)
+#if _GLIBCXX_CEST_VERSION
+      : __ostream_type(__sb), _M_gcount(streamsize(0))
+#else
       : _M_gcount(streamsize(0))
+#endif
       { this->init(__sb); }
 
       /**
@@ -604,14 +615,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     protected:
       basic_istream()
+#if _GLIBCXX_CEST_VERSION
+      : __ostream_type(), _M_gcount(streamsize(0))
+#else
       : _M_gcount(streamsize(0))
+#endif
       { this->init(0); }
 
 #if __cplusplus >= 201103L
       basic_istream(const basic_istream&) = delete;
 
       basic_istream(basic_istream&& __rhs)
+#if _GLIBCXX_CEST_VERSION
+      : __ostream_type(*this), _M_gcount(__rhs._M_gcount)
+#else
       : __ios_type(), _M_gcount(__rhs._M_gcount)
+#endif
       {
 	__ios_type::move(__rhs);
 	__rhs._M_gcount = 0;
@@ -631,7 +650,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       void
       swap(basic_istream& __rhs)
       {
+#if _GLIBCXX_CEST_VERSION
+	__ostream_type::swap(__rhs);
+#else
 	__ios_type::swap(__rhs);
+#endif
 	std::swap(_M_gcount, __rhs._M_gcount);
       }
 #endif
@@ -867,8 +890,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   */
   template<typename _CharT, typename _Traits>
     class basic_iostream
+#if _GLIBCXX_CEST_VERSION
+    : public basic_istream<_CharT, _Traits>
+#else
     : public basic_istream<_CharT, _Traits>,
       public basic_ostream<_CharT, _Traits>
+#endif
     {
     public:
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
@@ -892,7 +919,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       */
       explicit
       basic_iostream(basic_streambuf<_CharT, _Traits>* __sb)
+#if _GLIBCXX_CEST_VERSION
+      : __istream_type(__sb) { }
+#else
       : __istream_type(__sb), __ostream_type(__sb) { }
+#endif
 
       /**
        *  @brief  Destructor does nothing.
@@ -902,13 +933,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     protected:
       basic_iostream()
+#if _GLIBCXX_CEST_VERSION
+      : __istream_type() { }
+#else
       : __istream_type(), __ostream_type() { }
+#endif
 
 #if __cplusplus >= 201103L
       basic_iostream(const basic_iostream&) = delete;
 
       basic_iostream(basic_iostream&& __rhs)
+#if _GLIBCXX_CEST_VERSION
+      : __istream_type(std::move(__rhs))
+#else
       : __istream_type(std::move(__rhs)), __ostream_type(*this)
+#endif
       { }
 
       // 27.7.3.3 Assign/swap

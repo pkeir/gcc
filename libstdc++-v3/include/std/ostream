@@ -55,7 +55,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *  derived from basic_streambuf to do the actual output.
   */
   template<typename _CharT, typename _Traits>
+#if _GLIBCXX_CEST_VERSION
+    class basic_ostream : public basic_ios<_CharT, _Traits>
+#else
     class basic_ostream : virtual public basic_ios<_CharT, _Traits>
+#endif
     {
     public:
       // Types (inherited from basic_ios):
@@ -405,6 +409,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if __cplusplus >= 201103L
       // Non-standard constructor that does not call init()
       basic_ostream(basic_iostream<_CharT, _Traits>&) { }
+#if _GLIBCXX_CEST_VERSION
+      basic_ostream(basic_ostream<_CharT, _Traits>&) { }
+#endif
 
       basic_ostream(const basic_ostream&) = delete;
 
