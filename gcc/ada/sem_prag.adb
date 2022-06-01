@@ -2139,11 +2139,24 @@ package body Sem_Prag is
       Expr     : Node_Id;
 
    begin
-      --  Do not analyze the pragma multiple times, but set the output
-      --  parameter to the argument specified by the pragma.
+      --  Ensure that the Boolean expression (if present) is static. A missing
+      --  argument defaults the value to True (SPARK RM 7.1.2(5)).
+
+      Expr_Val := True;
+
+      if Present (Arg1) then
+         Expr := Get_Pragma_Arg (Arg1);
+
+         if Is_OK_Static_Expression (Expr) then
+            Expr_Val := Is_True (Expr_Value (Expr));
+         end if;
+      end if;
+
+      --  The output parameter was set to the argument specified by the pragma.
+      --  Do not analyze the pragma multiple times.
 
       if Is_Analyzed_Pragma (N) then
-         goto Leave;
+         return;
       end if;
 
       Error_Msg_Name_1 := Pragma_Name (N);
@@ -2163,9 +2176,11 @@ package body Sem_Prag is
          if Ekind (Obj_Id) = E_Variable
            and then No_Caching_Enabled (Obj_Id)
          then
-            SPARK_Msg_N
-              ("illegal combination of external property % and property "
-               & """No_Caching"" (SPARK RM 7.1.2(6))", N);
+            if Expr_Val then  --  Confirming value of False is allowed
+               SPARK_Msg_N
+                 ("illegal combination of external property % and property "
+                  & """No_Caching"" (SPARK RM 7.1.2(6))", N);
+            end if;
          else
             SPARK_Msg_N
               ("external property % must apply to a volatile type or object",
@@ -2185,22 +2200,6 @@ package body Sem_Prag is
       end if;
 
       Set_Is_Analyzed_Pragma (N);
-
-      <<Leave>>
-
-      --  Ensure that the Boolean expression (if present) is static. A missing
-      --  argument defaults the value to True (SPARK RM 7.1.2(5)).
-
-      Expr_Val := True;
-
-      if Present (Arg1) then
-         Expr := Get_Pragma_Arg (Arg1);
-
-         if Is_OK_Static_Expression (Expr) then
-            Expr_Val := Is_True (Expr_Value (Expr));
-         end if;
-      end if;
-
    end Analyze_External_Property_In_Decl_Part;
 
    ---------------------------------
@@ -14322,15 +14321,6 @@ package body Sem_Prag is
          when Pragma_Compile_Time_Error | Pragma_Compile_Time_Warning =>
             GNAT_Pragma;
 
-            --  These pragmas rely on the context. In adc files they raise
-            --  Constraint_Error. Ban them from use as configuration pragmas
-            --  even in cases where such a use could work.
-
-            if Is_Configuration_Pragma then
-               Error_Pragma
-                  ("pragma% is not allowed as a configuration pragma");
-            end if;
-
             Process_Compile_Time_Warning_Or_Error;
 
          -----------------------------
@@ -16017,7 +16007,6 @@ package body Sem_Prag is
                end loop Innr;
 
                if Citem = N then
-                  Set_Error_Posted (N);
                   Error_Pragma_Arg
                     ("argument of pragma% is not withed unit", Arg);
                end if;
@@ -19423,7 +19412,8 @@ package body Sem_Prag is
                if Chars (Variant) = No_Name then
                   Error_Pragma_Arg_Ident ("expect name `Increases`", Variant);
 
-               elsif Chars (Variant) not in Name_Decreases | Name_Increases
+               elsif Chars (Variant) not in
+                    Name_Decreases | Name_Increases | Name_Structural
                then
                   declare
                      Name : String := Get_Name_String (Chars (Variant));
@@ -19448,11 +19438,24 @@ package body Sem_Prag is
                         Error_Pragma_Arg_Ident
                           ("expect name `Decreases`", Variant);
 
+                     elsif Name'Length >= 4
+                       and then Name (1 .. 4) = "stru"
+                     then
+                        Error_Pragma_Arg_Ident
+                          ("expect name `Structural`", Variant);
+
                      else
                         Error_Pragma_Arg_Ident
-                          ("expect name `Increases` or `Decreases`", Variant);
+                          ("expect name `Increases`, `Decreases`,"
+                           & " or `Structural`", Variant);
                      end if;
                   end;
+
+               elsif Chars (Variant) = Name_Structural
+                 and then List_Length (Pragma_Argument_Associations (N)) > 1
+               then
+                  Error_Pragma_Arg_Ident
+                    ("Structural variant shall be the only variant", Variant);
                end if;
 
                --  Preanalyze_Assert_Expression, but without enforcing any of
@@ -19460,9 +19463,12 @@ package body Sem_Prag is
 
                Preanalyze_Assert_Expression (Expression (Variant));
 
-               --  Expression of a discrete type is allowed
+               --  Expression of a discrete type is allowed. Nothing to
+               --  check for structural variants.
 
-               if Is_Discrete_Type (Etype (Expression (Variant))) then
+               if Chars (Variant) = Name_Structural
+                 or else Is_Discrete_Type (Etype (Expression (Variant)))
+               then
                   null;
 
                --  Expression of a Big_Integer type (or its ghost variant) is
@@ -20364,12 +20370,12 @@ package body Sem_Prag is
 
          --  pragma Obsolescent (
          --    [Message =>] static_string_EXPRESSION
-         --  [,[Version =>] Ada_05]]);
+         --  [,[Version =>] Ada_05]);
 
          --  pragma Obsolescent (
          --    [Entity  =>] NAME
          --  [,[Message =>] static_string_EXPRESSION
-         --  [,[Version =>] Ada_05]] );
+         --  [,[Version =>] Ada_05]]);
 
          when Pragma_Obsolescent => Obsolescent : declare
             Decl  : Node_Id;
@@ -24227,13 +24233,16 @@ package body Sem_Prag is
          -- Subprogram_Variant --
          ------------------------
 
-         --  pragma Subprogram_Variant ( SUBPROGRAM_VARIANT_ITEM
-         --                           {, SUBPROGRAM_VARIANT_ITEM } );
+         --  pragma Subprogram_Variant ( SUBPROGRAM_VARIANT_LIST );
 
-         --  SUBPROGRAM_VARIANT_ITEM ::=
-         --    CHANGE_DIRECTION => discrete_EXPRESSION
-
-         --  CHANGE_DIRECTION ::= Increases | Decreases
+         --  SUBPROGRAM_VARIANT_LIST ::= STRUCTURAL_SUBPROGRAM_VARIANT_ITEM
+         --                            | NUMERIC_SUBPROGRAM_VARIANT_ITEMS
+         --  NUMERIC_SUBPROGRAM_VARIANT_ITEMS ::=
+         --    NUMERIC_SUBPROGRAM_VARIANT_ITEM
+         --      {, NUMERIC_SUBPROGRAM_VARIANT_ITEM}
+         --  NUMERIC_SUBPROGRAM_VARIANT_ITEM ::= CHANGE_DIRECTION => EXPRESSION
+         --  STRUCTURAL_SUBPROGRAM_VARIANT_ITEM ::= Structural => EXPRESSION
+         --  CHANGE_DIRECTION        ::= Increases | Decreases
 
          --  Characteristics:
 
@@ -29435,9 +29444,9 @@ package body Sem_Prag is
          --  Check placement of OTHERS if available (SPARK RM 6.1.3(1))
 
          if Nkind (Direction) = N_Identifier then
-            if Chars (Direction) /= Name_Decreases
-                 and then
-               Chars (Direction) /= Name_Increases
+            if Chars (Direction) not in Name_Decreases
+                                      | Name_Increases
+                                      | Name_Structural
             then
                Error_Msg_N ("wrong direction", Direction);
             end if;
@@ -29452,9 +29461,12 @@ package body Sem_Prag is
 
          Preanalyze_Assert_Expression (Expr);
 
-         --  Expression of a discrete type is allowed
+         --  Expression of a discrete type is allowed. Nothing more to check
+         --  for structural variants.
 
-         if Is_Discrete_Type (Etype (Expr)) then
+         if Is_Discrete_Type (Etype (Expr))
+              or else Chars (Direction) = Name_Structural
+         then
             null;
 
          --  Expression of a Big_Integer type (or its ghost variant) is only
@@ -29561,6 +29573,14 @@ package body Sem_Prag is
          Variant := First (Component_Associations (Variants));
          while Present (Variant) loop
             Analyze_Variant (Variant);
+
+            if Chars (First (Choices (Variant))) = Name_Structural
+              and then List_Length (Component_Associations (Variants)) > 1
+            then
+               Error_Msg_N
+                 ("Structural variant shall be the only variant", Variant);
+            end if;
+
             Next (Variant);
          end loop;
 

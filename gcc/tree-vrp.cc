@@ -924,20 +924,6 @@ extract_range_from_plus_minus_expr (value_range *vr,
     vr->set (min, max, kind);
 }
 
-/* Return the range-ops handler for CODE and EXPR_TYPE.  If no
-   suitable operator is found, return NULL and set VR to VARYING.  */
-
-static const range_operator *
-get_range_op_handler (value_range *vr,
-		      enum tree_code code,
-		      tree expr_type)
-{
-  const range_operator *op = range_op_handler (code, expr_type);
-  if (!op)
-    vr->set_varying (expr_type);
-  return op;
-}
-
 /* If the types passed are supported, return TRUE, otherwise set VR to
    VARYING and return FALSE.  */
 
@@ -1005,10 +991,12 @@ range_fold_binary_symbolics_p (value_range *vr,
 						&vr0, &vr1);
 	  return true;
 	}
-      const range_operator *op = get_range_op_handler (vr, code, expr_type);
+      range_op_handler op (code, expr_type);
+      if (!op)
+	vr->set_varying (expr_type);
       vr0.normalize_symbolics ();
       vr1.normalize_symbolics ();
-      return op->fold_range (*vr, expr_type, vr0, vr1);
+      return op.fold_range (*vr, expr_type, vr0, vr1);
     }
   return false;
 }
@@ -1040,10 +1028,12 @@ range_fold_unary_symbolics_p (value_range *vr,
 	  range_fold_binary_expr (vr, MINUS_EXPR, expr_type, &minusone, vr0);
 	  return true;
 	}
-      const range_operator *op = get_range_op_handler (vr, code, expr_type);
+      range_op_handler op (code, expr_type);
+      if (!op)
+	vr->set_varying (expr_type);
       value_range vr0_cst (*vr0);
       vr0_cst.normalize_symbolics ();
-      return op->fold_range (*vr, expr_type, vr0_cst, value_range (expr_type));
+      return op.fold_range (*vr, expr_type, vr0_cst, value_range (expr_type));
     }
   return false;
 }
@@ -1060,9 +1050,12 @@ range_fold_binary_expr (value_range *vr,
   if (!supported_types_p (vr, expr_type)
       || !defined_ranges_p (vr, vr0_, vr1_))
     return;
-  const range_operator *op = get_range_op_handler (vr, code, expr_type);
+  range_op_handler op (code, expr_type);
   if (!op)
-    return;
+    {
+      vr->set_varying (expr_type);
+      return;
+    }
 
   if (range_fold_binary_symbolics_p (vr, code, expr_type, vr0_, vr1_))
     return;
@@ -1075,7 +1068,7 @@ range_fold_binary_expr (value_range *vr,
     vr1.set_varying (expr_type);
   vr0.normalize_addresses ();
   vr1.normalize_addresses ();
-  op->fold_range (*vr, expr_type, vr0, vr1);
+  op.fold_range (*vr, expr_type, vr0, vr1);
 }
 
 /* Perform a unary operation on a range.  */
@@ -1089,16 +1082,19 @@ range_fold_unary_expr (value_range *vr,
   if (!supported_types_p (vr, expr_type, vr0_type)
       || !defined_ranges_p (vr, vr0))
     return;
-  const range_operator *op = get_range_op_handler (vr, code, expr_type);
+  range_op_handler op (code, expr_type);
   if (!op)
-    return;
+    {
+      vr->set_varying (expr_type);
+      return;
+    }
 
   if (range_fold_unary_symbolics_p (vr, code, expr_type, vr0))
     return;
 
   value_range vr0_cst (*vr0);
   vr0_cst.normalize_addresses ();
-  op->fold_range (*vr, expr_type, vr0_cst, value_range (expr_type));
+  op.fold_range (*vr, expr_type, vr0_cst, value_range (expr_type));
 }
 
 /* If the range of values taken by OP can be inferred after STMT executes,
@@ -3795,8 +3791,8 @@ public:
   void finalize ();
 
 private:
-  enum ssa_prop_result visit_stmt (gimple *, edge *, tree *) FINAL OVERRIDE;
-  enum ssa_prop_result visit_phi (gphi *) FINAL OVERRIDE;
+  enum ssa_prop_result visit_stmt (gimple *, edge *, tree *) final override;
+  enum ssa_prop_result visit_phi (gphi *) final override;
 
   struct function *fun;
   vr_values *m_vr_values;
@@ -4036,11 +4032,11 @@ class vrp_folder : public substitute_and_fold_engine
   void simplify_casted_conds (function *fun);
 
 private:
-  tree value_of_expr (tree name, gimple *stmt) OVERRIDE
+  tree value_of_expr (tree name, gimple *stmt) override
     {
       return m_vr_values->value_of_expr (name, stmt);
     }
-  bool fold_stmt (gimple_stmt_iterator *) FINAL OVERRIDE;
+  bool fold_stmt (gimple_stmt_iterator *) final override;
   bool fold_predicate_in (gimple_stmt_iterator *);
 
   vr_values *m_vr_values;
@@ -4269,7 +4265,7 @@ public:
     delete m_pta;
   }
 
-  tree value_of_expr (tree name, gimple *s = NULL) OVERRIDE
+  tree value_of_expr (tree name, gimple *s = NULL) override
   {
     // Shortcircuit subst_and_fold callbacks for abnormal ssa_names.
     if (TREE_CODE (name) == SSA_NAME && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (name))
@@ -4280,7 +4276,7 @@ public:
     return ret;
   }
 
-  tree value_on_edge (edge e, tree name) OVERRIDE
+  tree value_on_edge (edge e, tree name) override
   {
     // Shortcircuit subst_and_fold callbacks for abnormal ssa_names.
     if (TREE_CODE (name) == SSA_NAME && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (name))
@@ -4291,7 +4287,7 @@ public:
     return ret;
   }
 
-  tree value_of_stmt (gimple *s, tree name = NULL) OVERRIDE
+  tree value_of_stmt (gimple *s, tree name = NULL) override
   {
     // Shortcircuit subst_and_fold callbacks for abnormal ssa_names.
     if (TREE_CODE (name) == SSA_NAME && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (name))
@@ -4299,27 +4295,30 @@ public:
     return m_ranger->value_of_stmt (s, name);
   }
 
-  void pre_fold_bb (basic_block bb) OVERRIDE
+  void pre_fold_bb (basic_block bb) override
   {
     m_pta->enter (bb);
+    for (gphi_iterator gsi = gsi_start_phis (bb); !gsi_end_p (gsi);
+	 gsi_next (&gsi))
+      m_ranger->register_inferred_ranges (gsi.phi ());
   }
 
-  void post_fold_bb (basic_block bb) OVERRIDE
+  void post_fold_bb (basic_block bb) override
   {
     m_pta->leave (bb);
   }
 
-  void pre_fold_stmt (gimple *stmt) OVERRIDE
+  void pre_fold_stmt (gimple *stmt) override
   {
     m_pta->visit_stmt (stmt);
   }
 
-  bool fold_stmt (gimple_stmt_iterator *gsi) OVERRIDE
+  bool fold_stmt (gimple_stmt_iterator *gsi) override
   {
     bool ret = m_simplifier.simplify (gsi);
     if (!ret)
       ret = m_ranger->fold_stmt (gsi, follow_single_use_edges);
-    m_ranger->register_side_effects (gsi_stmt (*gsi));
+    m_ranger->register_inferred_ranges (gsi_stmt (*gsi));
     return ret;
   }
 
@@ -4342,10 +4341,9 @@ execute_ranger_vrp (struct function *fun, bool warn_array_bounds_p)
   calculate_dominance_info (CDI_DOMINATORS);
 
   set_all_edges_as_executable (fun);
-  gimple_ranger *ranger = enable_ranger (fun);
+  gimple_ranger *ranger = enable_ranger (fun, false);
   rvrp_folder folder (ranger);
   folder.substitute_and_fold ();
-  ranger->export_global_ranges ();
   if (dump_file && (dump_flags & TDF_DETAILS))
     ranger->dump (dump_file);
 

@@ -58,8 +58,8 @@
 #include "reload.h"
 #include "sched-int.h"
 #include "gimplify.h"
-#include "gimple-fold.h"
 #include "gimple-iterator.h"
+#include "gimple-fold.h"
 #include "gimple-walk.h"
 #include "ssa.h"
 #include "tree-vectorizer.h"
@@ -2305,7 +2305,6 @@ rs6000_debug_reg_global (void)
   fprintf (stderr,
 	   "\n"
 	   "d  reg_class = %s\n"
-	   "f  reg_class = %s\n"
 	   "v  reg_class = %s\n"
 	   "wa reg_class = %s\n"
 	   "we reg_class = %s\n"
@@ -2314,7 +2313,6 @@ rs6000_debug_reg_global (void)
 	   "wA reg_class = %s\n"
 	   "\n",
 	   reg_class_names[rs6000_constraints[RS6000_CONSTRAINT_d]],
-	   reg_class_names[rs6000_constraints[RS6000_CONSTRAINT_f]],
 	   reg_class_names[rs6000_constraints[RS6000_CONSTRAINT_v]],
 	   reg_class_names[rs6000_constraints[RS6000_CONSTRAINT_wa]],
 	   reg_class_names[rs6000_constraints[RS6000_CONSTRAINT_we]],
@@ -2953,7 +2951,6 @@ rs6000_init_hard_regno_mode_ok (bool global_init_p)
      constraints are:
 
 	d  - Register class to use with traditional DFmode instructions.
-	f  - Register class to use with traditional SFmode instructions.
 	v  - Altivec register.
 	wa - Any VSX register.
 	wc - Reserved to represent individual CR bits (used in LLVM).
@@ -2962,18 +2959,11 @@ rs6000_init_hard_regno_mode_ok (bool global_init_p)
 	wx - Float register if we can do 32-bit int stores.  */
 
   if (TARGET_HARD_FLOAT)
-    {
-      rs6000_constraints[RS6000_CONSTRAINT_f] = FLOAT_REGS;	/* SFmode  */
-      rs6000_constraints[RS6000_CONSTRAINT_d] = FLOAT_REGS;	/* DFmode  */
-    }
-
-  if (TARGET_VSX)
-    rs6000_constraints[RS6000_CONSTRAINT_wa] = VSX_REGS;
-
-  /* Add conditional constraints based on various options, to allow us to
-     collapse multiple insn patterns.  */
+    rs6000_constraints[RS6000_CONSTRAINT_d] = FLOAT_REGS;
   if (TARGET_ALTIVEC)
     rs6000_constraints[RS6000_CONSTRAINT_v] = ALTIVEC_REGS;
+  if (TARGET_VSX)
+    rs6000_constraints[RS6000_CONSTRAINT_wa] = VSX_REGS;
 
   if (TARGET_POWERPC64)
     {
@@ -23304,9 +23294,13 @@ rs6000_expand_vec_perm_const_1 (rtx target, rtx op0, rtx op1,
 /* Implement TARGET_VECTORIZE_VEC_PERM_CONST.  */
 
 static bool
-rs6000_vectorize_vec_perm_const (machine_mode vmode, rtx target, rtx op0,
-				 rtx op1, const vec_perm_indices &sel)
+rs6000_vectorize_vec_perm_const (machine_mode vmode, machine_mode op_mode,
+				 rtx target, rtx op0, rtx op1,
+				 const vec_perm_indices &sel)
 {
+  if (vmode != op_mode)
+    return false;
+
   bool testing_p = !target;
 
   /* AltiVec (and thus VSX) can handle arbitrary permutations.  */

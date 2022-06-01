@@ -712,7 +712,8 @@ static bool sparc_modes_tieable_p (machine_mode, machine_mode);
 static bool sparc_can_change_mode_class (machine_mode, machine_mode,
 					 reg_class_t);
 static HOST_WIDE_INT sparc_constant_alignment (const_tree, HOST_WIDE_INT);
-static bool sparc_vectorize_vec_perm_const (machine_mode, rtx, rtx, rtx,
+static bool sparc_vectorize_vec_perm_const (machine_mode, machine_mode,
+					    rtx, rtx, rtx,
 					    const vec_perm_indices &);
 static bool sparc_can_follow_jump (const rtx_insn *, const rtx_insn *);
 static HARD_REG_SET sparc_zero_call_used_regs (HARD_REG_SET);
@@ -13035,15 +13036,19 @@ sparc_expand_vec_perm_bmask (machine_mode vmode, rtx sel)
 /* Implement TARGET_VEC_PERM_CONST.  */
 
 static bool
-sparc_vectorize_vec_perm_const (machine_mode vmode, rtx target, rtx op0,
-				rtx op1, const vec_perm_indices &sel)
+sparc_vectorize_vec_perm_const (machine_mode vmode, machine_mode op_mode,
+				rtx target, rtx op0, rtx op1,
+				const vec_perm_indices &sel)
 {
+  if (vmode != op_mode)
+    return false;
+
   if (!TARGET_VIS2)
     return false;
 
-  /* All permutes are supported.  */
+  /* All 8-byte permutes are supported.  */
   if (!target)
-    return true;
+    return GET_MODE_SIZE (vmode) == 8;
 
   /* Force target-independent code to convert constant permutations on other
      modes down to V8QI.  Rely on this to avoid the complexity of the byte

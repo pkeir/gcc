@@ -86,9 +86,7 @@ static tree check_initializer (tree, tree, int, vec<tree, va_gc> **);
 static void make_rtl_for_nonlocal_decl (tree, tree, const char *);
 static void copy_type_enum (tree , tree);
 static void check_function_type (tree, tree);
-static void finish_constructor_body (void);
 static void begin_destructor_body (void);
-static void finish_destructor_body (void);
 static void record_key_method_defined (tree);
 static tree create_array_type_for_decl (tree, tree, tree, location_t);
 static tree get_atexit_node (void);
@@ -2110,30 +2108,31 @@ duplicate_decls (tree newdecl, tree olddecl, bool hiding, bool was_hidden)
       && TREE_CODE (olddecl) != NAMESPACE_DECL
       && !hiding)
     {
-      if (DECL_ARTIFICIAL (olddecl))
+      if (!module_may_redeclare (olddecl))
 	{
-	  if (!(global_purview_p () || not_module_p ()))
+	  if (DECL_ARTIFICIAL (olddecl))
 	    error ("declaration %qD conflicts with builtin", newdecl);
 	  else
-	    DECL_MODULE_EXPORT_P (olddecl) = DECL_MODULE_EXPORT_P (newdecl);
-	}
-      else
-	{
-	  if (!module_may_redeclare (olddecl))
 	    {
 	      error ("declaration %qD conflicts with import", newdecl);
 	      inform (olddecl_loc, "import declared %q#D here", olddecl);
-
-	      return error_mark_node;
 	    }
 
-	  if (DECL_MODULE_EXPORT_P (newdecl)
-	      && !DECL_MODULE_EXPORT_P (olddecl))
+	  return error_mark_node;
+	}
+
+      tree not_tmpl = STRIP_TEMPLATE (olddecl);
+      if (DECL_LANG_SPECIFIC (not_tmpl) && DECL_MODULE_ATTACH_P (not_tmpl))
+	{
+	  if (DECL_MODULE_EXPORT_P (STRIP_TEMPLATE (newdecl))
+	      && !DECL_MODULE_EXPORT_P (not_tmpl))
 	    {
 	      error ("conflicting exporting declaration %qD", newdecl);
 	      inform (olddecl_loc, "previous declaration %q#D here", olddecl);
 	    }
 	}
+      else if (DECL_MODULE_EXPORT_P (newdecl))
+	DECL_MODULE_EXPORT_P (not_tmpl) = true;
     }
 
   /* We have committed to returning OLDDECL at this point.  */
@@ -5465,7 +5464,8 @@ shadow_tag (cp_decl_specifier_seq *declspecs)
   if (!t)
     return NULL_TREE;
 
-  if (maybe_process_partial_specialization (t) == error_mark_node)
+  t = maybe_process_partial_specialization (t);
+  if (t == error_mark_node)
     return NULL_TREE;
 
   /* This is where the variables in an anonymous union are
@@ -5558,7 +5558,7 @@ start_decl (const cp_declarator *declarator,
   *pushed_scope_p = NULL_TREE;
 
   if (prefix_attributes != error_mark_node)
-    attributes = chainon (attributes, prefix_attributes);
+    attributes = attr_chainon (attributes, prefix_attributes);
 
   decl = grokdeclarator (declarator, declspecs, NORMAL, initialized,
 			 &attributes);
@@ -7414,12 +7414,19 @@ check_initializer (tree decl, tree init, int flags, vec<tree, va_gc> **cleanups)
 	      /* Declared constexpr or constinit, but no suitable initializer;
 		 massage init appropriately so we can pass it into
 		 store_init_value for the error.  */
-	      if (CLASS_TYPE_P (type)
-		  && (!init || TREE_CODE (init) == TREE_LIST))
+	      tree new_init = NULL_TREE;
+	      if (!processing_template_decl
+		  && TREE_CODE (init_code) == CALL_EXPR)
+		new_init = build_cplus_new (type, init_code, tf_none);
+	      else if (CLASS_TYPE_P (type)
+		       && (!init || TREE_CODE (init) == TREE_LIST))
+		new_init = build_functional_cast (input_location, type,
+						  init, tf_none);
+	      if (new_init)
 		{
-		  init = build_functional_cast (input_location, type,
-						init, tf_none);
-		  if (TREE_CODE (init) == TARGET_EXPR)
+		  init = new_init;
+		  if (TREE_CODE (init) == TARGET_EXPR
+		      && !(flags & LOOKUP_ONLYCONVERTING))
 		    TARGET_EXPR_DIRECT_INIT_P (init) = true;
 		}
 	      init_code = NULL_TREE;
@@ -10782,9 +10789,7 @@ grokvardecl (tree type,
   else if (flag_concepts
 	   && current_template_depth > template_class_depth (scope))
     {
-      tree reqs = TEMPLATE_PARMS_CONSTRAINTS (current_template_parms);
-      tree ci = build_constraints (reqs, NULL_TREE);
-
+      tree ci = current_template_constraints ();
       set_constraints (decl, ci);
     }
 
@@ -12370,7 +12375,7 @@ grokdeclarator (const cp_declarator *declarator,
     type = DECL_ORIGINAL_TYPE (TYPE_NAME (type));
 
   type_quals |= cp_type_quals (type);
-  type = cp_build_qualified_type_real
+  type = cp_build_qualified_type
     (type, type_quals, ((((typedef_decl && !DECL_ARTIFICIAL (typedef_decl))
 			  || declspecs->decltype_p)
 			 ? tf_ignore_bad_quals : 0) | tf_warning_or_error));
@@ -12722,9 +12727,10 @@ grokdeclarator (const cp_declarator *declarator,
 	       as a whole.  */
 	    late_attrs = splice_template_attributes (&attrs, type);
 	  returned_attrs = decl_attributes (&type,
-					    chainon (returned_attrs, attrs),
+					    attr_chainon (returned_attrs,
+							  attrs),
 					    attr_flags);
-	  returned_attrs = chainon (late_attrs, returned_attrs);
+	  returned_attrs = attr_chainon (late_attrs, returned_attrs);
 	}
 
       inner_declarator = declarator->declarator;
@@ -12775,8 +12781,8 @@ grokdeclarator (const cp_declarator *declarator,
 
 	       The optional attribute-specifier-seq appertains to the
 	       array.  */
-	    returned_attrs = chainon (returned_attrs,
-				      declarator->std_attributes);
+	    returned_attrs = attr_chainon (returned_attrs,
+					   declarator->std_attributes);
 	  break;
 
 	case cdk_function:
@@ -13116,9 +13122,9 @@ grokdeclarator (const cp_declarator *declarator,
 		/* transaction_safe applies to the type, but
 		   transaction_safe_dynamic applies to the function.  */
 		if (is_attribute_p ("transaction_safe", tx_qual))
-		  attrs = chainon (attrs, att);
+		  attrs = attr_chainon (attrs, att);
 		else
-		  returned_attrs = chainon (returned_attrs, att);
+		  returned_attrs = attr_chainon (returned_attrs, att);
 	      }
 	    if (attrs)
 	      /* [dcl.fct]/2:
@@ -13432,7 +13438,7 @@ grokdeclarator (const cp_declarator *declarator,
   if (returned_attrs)
     {
       if (attrlist)
-	*attrlist = chainon (returned_attrs, *attrlist);
+	*attrlist = attr_chainon (returned_attrs, *attrlist);
       else
 	attrlist = &returned_attrs;
     }
@@ -13445,7 +13451,7 @@ grokdeclarator (const cp_declarator *declarator,
       /* [dcl.meaning]/1: The optional attribute-specifier-seq following
 	 a declarator-id appertains to the entity that is declared.  */
       if (declarator->std_attributes != error_mark_node)
-	*attrlist = chainon (*attrlist, declarator->std_attributes);
+	*attrlist = attr_chainon (*attrlist, declarator->std_attributes);
       else
 	/* We should have already diagnosed the issue (c++/78344).  */
 	gcc_assert (seen_error ());
@@ -14219,9 +14225,7 @@ grokdeclarator (const cp_declarator *declarator,
 				> template_class_depth (current_class_type));
 		if (memtmpl)
 		  {
-		    tree tmpl_reqs
-		      = TEMPLATE_PARMS_CONSTRAINTS (current_template_parms);
-		    tree ci = build_constraints (tmpl_reqs, NULL_TREE);
+		    tree ci = current_template_constraints ();
 		    set_constraints (decl, ci);
 		  }
 	      }
@@ -15844,13 +15848,8 @@ xref_tag (enum tag_types tag_code, tree name,
         {
           /* Check that we aren't trying to overload a class with different
              constraints.  */
-          tree constr = NULL_TREE;
-          if (current_template_parms)
-            {
-              tree reqs = TEMPLATE_PARMS_CONSTRAINTS (current_template_parms);
-              constr = build_constraints (reqs, NULL_TREE);
-            }
-	  if (!redeclare_class_template (t, current_template_parms, constr))
+	  if (!redeclare_class_template (t, current_template_parms,
+					 current_template_constraints ()))
 	    return error_mark_node;
         }
       else if (!processing_template_decl
@@ -17502,22 +17501,20 @@ store_parm_decls (tree current_function_parms)
 }
 
 
-/* Set the return value of the constructor (if present).  */
+/* Set the return value of the [cd]tor if the ABI wants that.  */
 
-static void
-finish_constructor_body (void)
+void
+maybe_return_this (void)
 {
-  tree val;
-  tree exprstmt;
-
   if (targetm.cxx.cdtor_returns_this ())
     {
-      val = DECL_ARGUMENTS (current_function_decl);
+      /* Return the address of the object.  */
+      tree val = DECL_ARGUMENTS (current_function_decl);
       suppress_warning (val, OPT_Wuse_after_free);
+      val = fold_convert (TREE_TYPE (DECL_RESULT (current_function_decl)), val);
       val = build2 (MODIFY_EXPR, TREE_TYPE (val),
 		    DECL_RESULT (current_function_decl), val);
-      /* Return the address of the object.  */
-      exprstmt = build_stmt (input_location, RETURN_EXPR, val);
+      tree exprstmt = build_stmt (input_location, RETURN_EXPR, val);
       add_stmt (exprstmt);
     }
 }
@@ -17590,28 +17587,6 @@ begin_destructor_body (void)
     }
 }
 
-/* At the end of every destructor we generate code to delete the object if
-   necessary.  Do that now.  */
-
-static void
-finish_destructor_body (void)
-{
-  tree exprstmt;
-
-  if (targetm.cxx.cdtor_returns_this ())
-    {
-      tree val;
-
-      val = DECL_ARGUMENTS (current_function_decl);
-      suppress_warning (val, OPT_Wuse_after_free);
-      val = build2 (MODIFY_EXPR, TREE_TYPE (val),
-		    DECL_RESULT (current_function_decl), val);
-      /* Return the address of the object.  */
-      exprstmt = build_stmt (input_location, RETURN_EXPR, val);
-      add_stmt (exprstmt);
-    }
-}
-
 /* Do the necessary processing for the beginning of a function body, which
    in this case includes member-initializers, but not the catch clauses of
    a function-try-block.  Currently, this means opening a binding level
@@ -17662,10 +17637,9 @@ finish_function_body (tree compstmt)
 
   if (processing_template_decl)
     /* Do nothing now.  */;
-  else if (DECL_CONSTRUCTOR_P (current_function_decl))
-    finish_constructor_body ();
-  else if (DECL_DESTRUCTOR_P (current_function_decl))
-    finish_destructor_body ();
+  else if (DECL_CONSTRUCTOR_P (current_function_decl)
+	   || DECL_DESTRUCTOR_P (current_function_decl))
+    maybe_return_this ();
 }
 
 /* Given a function, returns the BLOCK corresponding to the outermost level

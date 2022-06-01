@@ -3967,6 +3967,30 @@ package body Sem_Ch8 is
                  ("implicit operation& is not visible (RM 8.3 (15))",
                   Nam, Old_S);
             end if;
+
+         --  Check whether an expanded name used for the renamed subprogram
+         --  begins with the same name as the renaming itself, and if so,
+         --  issue an error about the prefix being hidden by the renaming.
+         --  We exclude generic instances from this checking, since such
+         --  normally illegal renamings can be constructed when expanding
+         --  instantiations.
+
+         elsif Nkind (Nam) = N_Expanded_Name and then not In_Instance then
+            declare
+               function Ult_Expanded_Prefix (N : Node_Id) return Node_Id is
+                 (if Nkind (N) /= N_Expanded_Name
+                  then N
+                  else Ult_Expanded_Prefix (Prefix (N)));
+               --  Returns the ultimate prefix of an expanded name
+
+            begin
+               if Chars (Entity (Ult_Expanded_Prefix (Nam))) = Chars (New_S)
+               then
+                  Error_Msg_Sloc := Sloc (N);
+                  Error_Msg_NE
+                    ("& is hidden by declaration#", Nam, New_S);
+               end if;
+            end;
          end if;
 
          Set_Convention (New_S, Convention (Old_S));
@@ -6971,6 +6995,8 @@ package body Sem_Ch8 is
                                            Standard_Standard)
                then
                   if not Error_Posted (N) then
+                     Error_Msg_NE
+                       ("& is not a visible entity of&", Prefix (N), Selector);
                      Error_Missing_With_Of_Known_Unit (Prefix (N));
                   end if;
 
@@ -9202,8 +9228,33 @@ package body Sem_Ch8 is
      (Clause1 : Entity_Id;
       Clause2 : Entity_Id) return Entity_Id
    is
+      function Determine_Package_Scope (Clause : Node_Id) return Entity_Id;
+      --  Given a use clause, determine which package it belongs to
+
+      -----------------------------
+      -- Determine_Package_Scope --
+      -----------------------------
+
+      function Determine_Package_Scope (Clause : Node_Id) return Entity_Id is
+      begin
+         --  Check if the clause appears in the context area
+
+         --  Note we cannot employ Enclosing_Packge for use clauses within
+         --  context clauses since they are not actually "enclosed."
+
+         if Nkind (Parent (Clause)) = N_Compilation_Unit then
+            return Entity_Of_Unit (Unit (Parent (Clause)));
+         end if;
+
+         --  Otherwise, obtain the enclosing package normally
+
+         return Enclosing_Package (Clause);
+      end Determine_Package_Scope;
+
       Scope1 : Entity_Id;
       Scope2 : Entity_Id;
+
+   --  Start of processing for Most_Descendant_Use_Clause
 
    begin
       if Clause1 = Clause2 then
@@ -9213,8 +9264,8 @@ package body Sem_Ch8 is
       --  We determine which one is the most descendant by the scope distance
       --  to the ultimate parent unit.
 
-      Scope1 := Entity_Of_Unit (Unit (Parent (Clause1)));
-      Scope2 := Entity_Of_Unit (Unit (Parent (Clause2)));
+      Scope1 := Determine_Package_Scope (Clause1);
+      Scope2 := Determine_Package_Scope (Clause2);
       while Scope1 /= Standard_Standard
         and then Scope2 /= Standard_Standard
       loop
@@ -10275,6 +10326,11 @@ package body Sem_Ch8 is
 
                   --  Potentially use-visible entity remains hidden
 
+                  if Warn_On_Hiding then
+                     Warn_On_Hiding_Entity (N, Hidden => Id, Visible => Prev,
+                                            On_Use_Clause => True);
+                  end if;
+
                   goto Next_Usable_Entity;
 
                --  A use clause within an instance hides outer global entities,
@@ -10571,20 +10627,6 @@ package body Sem_Ch8 is
       --  even if it is redundant at the place of the instantiation.
 
       elsif Redundant_Use (Id) then
-
-         --  We must avoid incorrectly setting the Current_Use_Clause when we
-         --  are working with a redundant clause that has already been linked
-         --  in the Prev_Use_Clause chain, otherwise the chain will break.
-
-         if Present (Current_Use_Clause (T))
-           and then Present (Prev_Use_Clause (Current_Use_Clause (T)))
-           and then Parent (Id) = Prev_Use_Clause (Current_Use_Clause (T))
-         then
-            null;
-         else
-            Set_Current_Use_Clause (T, Parent (Id));
-         end if;
-
          Set_Used_Operations (Parent (Id), New_Elmt_List);
 
       --  If the subtype mark designates a subtype in a different package,
@@ -10689,121 +10731,98 @@ package body Sem_Ch8 is
                --  Start of processing for Use_Clause_Known
 
                begin
-                  --  If both current use_type_clause and the use_type_clause
-                  --  for the type are at the compilation unit level, one of
-                  --  the units must be an ancestor of the other, and the
-                  --  warning belongs on the descendant.
+                  --  If the unit is a subprogram body that acts as spec, the
+                  --  context clause is shared with the constructed subprogram
+                  --  spec. Clearly there is no redundancy.
 
-                  if Nkind (Parent (Clause1)) = N_Compilation_Unit
-                       and then
-                     Nkind (Parent (Clause2)) = N_Compilation_Unit
+                  if Clause1 = Clause2 then
+                     return;
+                  end if;
+
+                  Unit1 := Unit (Enclosing_Comp_Unit_Node (Clause1));
+                  Unit2 := Unit (Enclosing_Comp_Unit_Node (Clause2));
+
+                  --  If both clauses are on same unit, or one is the body of
+                  --  the other, or one of them is in a subunit, report
+                  --  redundancy on the later one.
+
+                  if Unit1 = Unit2
+                    or else Nkind (Unit1) = N_Subunit
+                    or else
+                      (Nkind (Unit2) in N_Package_Body | N_Subprogram_Body
+                        and then Nkind (Unit1) /= Nkind (Unit2)
+                        and then Nkind (Unit1) /= N_Subunit)
                   then
-                     --  If the unit is a subprogram body that acts as spec,
-                     --  the context clause is shared with the constructed
-                     --  subprogram spec. Clearly there is no redundancy.
-
-                     if Clause1 = Clause2 then
-                        return;
-                     end if;
-
-                     Unit1 := Unit (Parent (Clause1));
-                     Unit2 := Unit (Parent (Clause2));
-
-                     --  If both clauses are on same unit, or one is the body
-                     --  of the other, or one of them is in a subunit, report
-                     --  redundancy on the later one.
-
-                     if Unit1 = Unit2 or else Nkind (Unit1) = N_Subunit then
-                        Error_Msg_Sloc := Sloc (Current_Use_Clause (T));
-                        Error_Msg_NE -- CODEFIX
-                          ("& is already use-visible through previous "
-                           & "use_type_clause #??", Clause1, T);
-                        return;
-
-                     elsif Nkind (Unit2) in N_Package_Body | N_Subprogram_Body
-                       and then Nkind (Unit1) /= Nkind (Unit2)
-                       and then Nkind (Unit1) /= N_Subunit
-                     then
-                        Error_Msg_Sloc := Sloc (Clause1);
-                        Error_Msg_NE -- CODEFIX
-                          ("& is already use-visible through previous "
-                           & "use_type_clause #??", Current_Use_Clause (T), T);
-                        return;
-                     end if;
-
-                     --  There is a redundant use_type_clause in a child unit.
-                     --  Determine which of the units is more deeply nested.
-                     --  If a unit is a package instance, retrieve the entity
-                     --  and its scope from the instance spec.
-
-                     Ent1 := Entity_Of_Unit (Unit1);
-                     Ent2 := Entity_Of_Unit (Unit2);
-
-                     if Scope (Ent2) = Standard_Standard then
-                        Error_Msg_Sloc := Sloc (Current_Use_Clause (T));
-                        Err_No := Clause1;
-
-                     elsif Scope (Ent1) = Standard_Standard then
-                        Error_Msg_Sloc := Sloc (Id);
-                        Err_No := Clause2;
-
-                     --  If both units are child units, we determine which one
-                     --  is the descendant by the scope distance to the
-                     --  ultimate parent unit.
-
-                     else
-                        declare
-                           S1 : Entity_Id;
-                           S2 : Entity_Id;
-
-                        begin
-                           S1 := Scope (Ent1);
-                           S2 := Scope (Ent2);
-                           while Present (S1)
-                             and then Present (S2)
-                             and then S1 /= Standard_Standard
-                             and then S2 /= Standard_Standard
-                           loop
-                              S1 := Scope (S1);
-                              S2 := Scope (S2);
-                           end loop;
-
-                           if S1 = Standard_Standard then
-                              Error_Msg_Sloc := Sloc (Id);
-                              Err_No := Clause2;
-                           else
-                              Error_Msg_Sloc := Sloc (Current_Use_Clause (T));
-                              Err_No := Clause1;
-                           end if;
-                        end;
-                     end if;
-
-                     if Parent (Id) /= Err_No then
-                        if Most_Descendant_Use_Clause
-                             (Err_No, Parent (Id)) = Parent (Id)
-                        then
-                           Error_Msg_Sloc := Sloc (Err_No);
-                           Err_No := Parent (Id);
-                        end if;
-
-                        Error_Msg_NE -- CODEFIX
-                          ("& is already use-visible through previous "
-                           & "use_type_clause #??", Err_No, Id);
-                     end if;
-
-                  --  Case where current use_type_clause and use_type_clause
-                  --  for the type are not both at the compilation unit level.
-                  --  In this case we don't have location information.
-
-                  else
+                     Error_Msg_Sloc := Sloc (Clause1);
                      Error_Msg_NE -- CODEFIX
                        ("& is already use-visible through previous "
-                        & "use_type_clause??", Id, T);
+                        & "use_type_clause #??", Clause2, T);
+                     return;
+                  end if;
+
+                  --  There is a redundant use_type_clause in a child unit.
+                  --  Determine which of the units is more deeply nested. If a
+                  --  unit is a package instance, retrieve the entity and its
+                  --  scope from the instance spec.
+
+                  Ent1 := Entity_Of_Unit (Unit1);
+                  Ent2 := Entity_Of_Unit (Unit2);
+
+                  if Scope (Ent2) = Standard_Standard then
+                     Error_Msg_Sloc := Sloc (Clause2);
+                     Err_No := Clause1;
+
+                  elsif Scope (Ent1) = Standard_Standard then
+                     Error_Msg_Sloc := Sloc (Id);
+                     Err_No := Clause2;
+
+                  --  If both units are child units, we determine which one is
+                  --  the descendant by the scope distance to the ultimate
+                  --  parent unit.
+
+                  else
+                     declare
+                        S1 : Entity_Id;
+                        S2 : Entity_Id;
+
+                     begin
+                        S1 := Scope (Ent1);
+                        S2 := Scope (Ent2);
+                        while Present (S1)
+                          and then Present (S2)
+                          and then S1 /= Standard_Standard
+                          and then S2 /= Standard_Standard
+                        loop
+                           S1 := Scope (S1);
+                           S2 := Scope (S2);
+                        end loop;
+
+                        if S1 = Standard_Standard then
+                           Error_Msg_Sloc := Sloc (Id);
+                           Err_No := Clause2;
+                        else
+                           Error_Msg_Sloc := Sloc (Clause2);
+                           Err_No := Clause1;
+                        end if;
+                     end;
+                  end if;
+
+                  if Parent (Id) /= Err_No then
+                     if Most_Descendant_Use_Clause
+                          (Err_No, Parent (Id)) = Parent (Id)
+                     then
+                        Error_Msg_Sloc := Sloc (Err_No);
+                        Err_No := Parent (Id);
+                     end if;
+
+                     Error_Msg_NE -- CODEFIX
+                       ("& is already use-visible through previous "
+                        & "use_type_clause #??", Err_No, Id);
                   end if;
                end Use_Clause_Known;
 
-            --  Here if Current_Use_Clause is not set for T, another case where
-            --  we do not have the location information available.
+            --  Here Current_Use_Clause is not set for T, so we do not have the
+            --  location information available.
 
             else
                Error_Msg_NE -- CODEFIX

@@ -1285,7 +1285,20 @@ has_stmt_been_instrumented_p (gimple *stmt)
 
       if (get_mem_ref_of_assignment (as_a <gassign *> (stmt), &r,
 				     &r_is_store))
-	return has_mem_ref_been_instrumented (&r);
+	{
+	  if (!has_mem_ref_been_instrumented (&r))
+	    return false;
+	  if (r_is_store && gimple_assign_load_p (stmt))
+	    {
+	      asan_mem_ref src;
+	      asan_mem_ref_init (&src, NULL, 1);
+	      src.start = gimple_assign_rhs1 (stmt);
+	      src.access_size = int_size_in_bytes (TREE_TYPE (src.start));
+	      if (!has_mem_ref_been_instrumented (&src))
+		return false;
+	    }
+	  return true;
+	}
     }
   else if (gimple_call_builtin_p (stmt, BUILT_IN_NORMAL))
     {
@@ -3457,14 +3470,22 @@ initialize_sanitizer_builtins (void)
 
 #include "sanitizer.def"
 
-  /* -fsanitize=object-size uses __builtin_object_size, but that might
-     not be available for e.g. Fortran at this point.  We use
-     DEF_SANITIZER_BUILTIN here only as a convenience macro.  */
-  if ((flag_sanitize & SANITIZE_OBJECT_SIZE)
-      && !builtin_decl_implicit_p (BUILT_IN_OBJECT_SIZE))
-    DEF_SANITIZER_BUILTIN_1 (BUILT_IN_OBJECT_SIZE, "object_size",
-			     BT_FN_SIZE_CONST_PTR_INT,
-			     ATTR_PURE_NOTHROW_LEAF_LIST);
+  /* -fsanitize=object-size uses __builtin_dynamic_object_size and
+     __builtin_object_size, but they might not be available for e.g. Fortran at
+     this point.  We use DEF_SANITIZER_BUILTIN here only as a convenience
+     macro.  */
+  if (flag_sanitize & SANITIZE_OBJECT_SIZE)
+    {
+      if (!builtin_decl_implicit_p (BUILT_IN_OBJECT_SIZE))
+	DEF_SANITIZER_BUILTIN_1 (BUILT_IN_OBJECT_SIZE, "object_size",
+				 BT_FN_SIZE_CONST_PTR_INT,
+				 ATTR_PURE_NOTHROW_LEAF_LIST);
+      if (!builtin_decl_implicit_p (BUILT_IN_DYNAMIC_OBJECT_SIZE))
+	DEF_SANITIZER_BUILTIN_1 (BUILT_IN_DYNAMIC_OBJECT_SIZE,
+				 "dynamic_object_size",
+				 BT_FN_SIZE_CONST_PTR_INT,
+				 ATTR_PURE_NOTHROW_LEAF_LIST);
+    }
 
 #undef DEF_SANITIZER_BUILTIN_1
 #undef DEF_SANITIZER_BUILTIN

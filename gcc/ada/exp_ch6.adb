@@ -1055,11 +1055,12 @@ package body Exp_Ch6 is
      (Func_Call   : Node_Id;
       Result_Subt : Entity_Id) return Boolean
    is
+      Ctrl : constant Node_Id   := Controlling_Argument (Func_Call);
+      Utyp : constant Entity_Id := Underlying_Type (Result_Subt);
+
    begin
-      return
-          (Is_Definite_Subtype (Underlying_Type (Result_Subt))
-            and then No (Controlling_Argument (Func_Call)))
-        or else not Requires_Transient_Scope (Underlying_Type (Result_Subt));
+      return (No (Ctrl) and then Is_Definite_Subtype (Utyp))
+        or else not Needs_Secondary_Stack (Utyp);
    end Caller_Known_Size;
 
    -----------------------
@@ -1576,8 +1577,8 @@ package body Exp_Ch6 is
             Var := Make_Var (Expression (Actual));
 
             Crep := not Has_Compatible_Representation
-                          (Target_Type  => F_Typ,
-                           Operand_Type => Etype (Expression (Actual)));
+                          (Target_Typ  => F_Typ,
+                           Operand_Typ => Etype (Expression (Actual)));
 
          else
             V_Typ := Etype (Actual);
@@ -2379,8 +2380,8 @@ package body Exp_Ch6 is
                   --  Also pass by copy if change of representation
 
                   or else not Has_Compatible_Representation
-                                (Target_Type  => Etype (Formal),
-                                 Operand_Type => Etype (Expression (Actual))))
+                                (Target_Typ  => Etype (Formal),
+                                 Operand_Typ => Etype (Expression (Actual))))
             then
                Add_Call_By_Copy_Code;
 
@@ -3298,19 +3299,33 @@ package body Exp_Ch6 is
          Variant_Prag : constant Node_Id :=
            Get_Pragma (Current_Scope, Pragma_Subprogram_Variant);
 
+         Pragma_Arg1  : Node_Id;
          Variant_Proc : Entity_Id;
 
       begin
          if Present (Variant_Prag) and then Is_Checked (Variant_Prag) then
 
-            --  Analysis of the pragma rewrites its argument with a reference
-            --  to the internally generated procedure.
+            Pragma_Arg1 :=
+              Expression (First (Pragma_Argument_Associations (Variant_Prag)));
 
-            Variant_Proc :=
-              Entity
-                (Expression
-                   (First
-                      (Pragma_Argument_Associations (Variant_Prag))));
+            --  If pragma parameter is still an aggregate, it comes from a
+            --  structural variant, which is not expanded and ignored for
+            --  run-time execution.
+
+            if Nkind (Pragma_Arg1) = N_Aggregate then
+               pragma Assert
+                 (Chars
+                    (First
+                      (Choices
+                         (First (Component_Associations (Pragma_Arg1))))) =
+                  Name_Structural);
+               return;
+            end if;
+
+            --  Otherwise, analysis of the pragma rewrites its argument with a
+            --  reference to the internally generated procedure.
+
+            Variant_Proc := Entity (Pragma_Arg1);
 
             Insert_Action (Call_Node,
               Make_Procedure_Call_Statement (Loc,
@@ -3932,7 +3947,7 @@ package body Exp_Ch6 is
             --  First verify the actual is internal
 
             elsif not Comes_From_Source (Prev)
-              and then Original_Node (Prev) = Prev
+              and then not Is_Rewrite_Substitution (Prev)
 
               --  Next check that the actual is a constant
 
@@ -4475,16 +4490,6 @@ package body Exp_Ch6 is
 
          Set_Entity (Name (Call_Node), Parent_Subp);
 
-         --  Move this check to sem???
-
-         if Is_Abstract_Subprogram (Parent_Subp)
-           and then not In_Instance
-         then
-            Error_Msg_NE
-              ("cannot call abstract subprogram &!",
-               Name (Call_Node), Parent_Subp);
-         end if;
-
          --  Inspect all formals of derived subprogram Subp. Compare parameter
          --  types with the parent subprogram and check whether an actual may
          --  need a type conversion to the corresponding formal of the parent
@@ -4566,8 +4571,8 @@ package body Exp_Ch6 is
                   --  warning, and do the change of representation.
 
                   elsif not Has_Compatible_Representation
-                              (Target_Type  => Formal_Typ,
-                               Operand_Type => Parent_Typ)
+                              (Target_Typ  => Formal_Typ,
+                               Operand_Typ => Parent_Typ)
                   then
                      Error_Msg_N
                        ("??change of representation required", Actual);
@@ -4909,8 +4914,8 @@ package body Exp_Ch6 is
       --  the return type is limited, then the context is initialization and
       --  different processing applies. If the call is to a protected function,
       --  the expansion above will call Expand_Call recursively. Otherwise the
-      --  function call is transformed into a temporary which obtains the
-      --  result from the secondary stack.
+      --  function call is transformed into a reference to the result that has
+      --  been built either on the return or the secondary stack.
 
       if Needs_Finalization (Etype (Subp)) then
          if not Is_Build_In_Place_Function_Call (Call_Node)
@@ -4937,10 +4942,11 @@ package body Exp_Ch6 is
            and then
              (Ekind (Current_Scope) /= E_Loop
                or else Nkind (Parent (Call_Node)) /= N_Function_Call
-               or else not Is_Build_In_Place_Function_Call
-                             (Parent (Call_Node)))
+               or else not
+                 Is_Build_In_Place_Function_Call (Parent (Call_Node)))
          then
-            Establish_Transient_Scope (Call_Node, Manage_Sec_Stack => True);
+            Establish_Transient_Scope
+              (Call_Node, Needs_Secondary_Stack (Etype (Subp)));
          end if;
       end if;
    end Expand_Call_Helper;
@@ -7335,10 +7341,9 @@ package body Exp_Ch6 is
       --  A return statement from an ignored Ghost function does not use the
       --  secondary stack (or any other one).
 
-      elsif not Requires_Transient_Scope (R_Type)
+      elsif not Needs_Secondary_Stack (R_Type)
         or else Is_Ignored_Ghost_Entity (Scope_Id)
       then
-
          --  Mutable records with variable-length components are not returned
          --  on the sec-stack, so we need to make sure that the back end will
          --  only copy back the size of the actual value, and not the maximum
@@ -7351,6 +7356,7 @@ package body Exp_Ch6 is
             Ubt  : constant Entity_Id := Underlying_Type (Base_Type (Exp_Typ));
             Decl : Node_Id;
             Ent  : Entity_Id;
+
          begin
             if not Exp_Is_Function_Call
               and then Has_Discriminants (Ubt)
@@ -7364,6 +7370,72 @@ package body Exp_Ch6 is
                Analyze_And_Resolve (Exp);
             end if;
          end;
+
+         --  For types which need finalization, do the allocation on the return
+         --  stack manually in order to call Adjust at the right time:
+
+         --    type Ann is access R_Type;
+         --    for Ann'Storage_pool use rs_pool;
+         --    Rnn : Ann := new Exp_Typ'(Exp);
+         --    return Rnn.all;
+
+         --  but optimize the case where the result is a function call that
+         --  also needs finalization. In this case the result is already on
+         --  the return stack and no further processing is required.
+
+         if Present (Utyp)
+           and then Needs_Finalization (Utyp)
+           and then not (Exp_Is_Function_Call
+                          and then Needs_Finalization (Exp_Typ))
+         then
+            declare
+               Loc        : constant Source_Ptr := Sloc (N);
+               Acc_Typ    : constant Entity_Id := Make_Temporary (Loc, 'A');
+               Alloc_Node : Node_Id;
+               Temp       : Entity_Id;
+
+            begin
+               Mutate_Ekind (Acc_Typ, E_Access_Type);
+
+               Set_Associated_Storage_Pool (Acc_Typ, RTE (RE_RS_Pool));
+
+               --  This is an allocator for the return stack, and it's fine
+               --  to have Comes_From_Source set False on it, as gigi knows not
+               --  to flag it as a violation of No_Implicit_Heap_Allocations.
+
+               Alloc_Node :=
+                 Make_Allocator (Loc,
+                   Expression =>
+                     Make_Qualified_Expression (Loc,
+                       Subtype_Mark => New_Occurrence_Of (Exp_Typ, Loc),
+                       Expression   => Relocate_Node (Exp)));
+
+               --  We do not want discriminant checks on the declaration,
+               --  given that it gets its value from the allocator.
+
+               Set_No_Initialization (Alloc_Node);
+
+               Temp := Make_Temporary (Loc, 'R', Alloc_Node);
+
+               Insert_Actions (Exp, New_List (
+                 Make_Full_Type_Declaration (Loc,
+                   Defining_Identifier => Acc_Typ,
+                   Type_Definition     =>
+                     Make_Access_To_Object_Definition (Loc,
+                       Subtype_Indication => Subtype_Ind)),
+
+                 Make_Object_Declaration (Loc,
+                   Defining_Identifier => Temp,
+                   Object_Definition   => New_Occurrence_Of (Acc_Typ, Loc),
+                   Expression          => Alloc_Node)));
+
+               Rewrite (Exp,
+                 Make_Explicit_Dereference (Loc,
+                 Prefix => New_Occurrence_Of (Temp, Loc)));
+
+               Analyze_And_Resolve (Exp, R_Type);
+            end;
+         end if;
 
       --  Here if secondary stack is used
 
@@ -7382,8 +7454,8 @@ package body Exp_Ch6 is
          --  wrong in the case of a controlled type, where gigi does not know
          --  how to do a copy.)
 
-         pragma Assert (Requires_Transient_Scope (R_Type));
-         if Exp_Is_Function_Call and then Requires_Transient_Scope (Exp_Typ)
+         if Exp_Is_Function_Call
+           and then Needs_Secondary_Stack (Exp_Typ)
          then
             Set_By_Ref (N);
 
@@ -7403,19 +7475,20 @@ package body Exp_Ch6 is
 
             Analyze_And_Resolve (Exp, R_Type);
 
-         --  For controlled types, do the allocation on the secondary stack
-         --  manually in order to call adjust at the right time:
+         --  For types which both need finalization and are returned on the
+         --  secondary stack, do the allocation on secondary stack manually
+         --  in order to call Adjust at the right time:
 
-         --    type Anon1 is access R_Type;
-         --    for Anon1'Storage_pool use ss_pool;
-         --    Anon2 : anon1 := new R_Type'(expr);
-         --    return Anon2.all;
+         --    type Ann is access R_Type;
+         --    for Ann'Storage_pool use ss_pool;
+         --    Rnn : Ann := new Exp_Typ'(Exp);
+         --    return Rnn.all;
 
-         --  We do the same for classwide types that are not potentially
+         --  And we do the same for class-wide types that are not potentially
          --  controlled (by the virtue of restriction No_Finalization) because
          --  gigi is not able to properly allocate class-wide types.
 
-         elsif CW_Or_Has_Controlled_Part (Utyp) then
+         elsif CW_Or_Needs_Finalization (Utyp) then
             declare
                Loc        : constant Source_Ptr := Sloc (N);
                Acc_Typ    : constant Entity_Id := Make_Temporary (Loc, 'A');
@@ -7767,6 +7840,7 @@ package body Exp_Ch6 is
 
       procedure Register_Predefined_DT_Entry (Prim : Entity_Id) is
          Iface_DT_Ptr : Elmt_Id;
+         L            : List_Id;
          Tagged_Typ   : Entity_Id;
          Thunk_Id     : Entity_Id;
          Thunk_Code   : Node_Id;
@@ -7799,7 +7873,7 @@ package body Exp_Ch6 is
               Iface => Related_Type (Node (Iface_DT_Ptr)));
 
             if Present (Thunk_Code) then
-               Insert_Actions_After (N, New_List (
+               L := New_List (
                  Thunk_Code,
 
                  Build_Set_Predefined_Prim_Op_Address (Loc,
@@ -7822,7 +7896,14 @@ package body Exp_Ch6 is
                      Unchecked_Convert_To (RTE (RE_Prim_Ptr),
                        Make_Attribute_Reference (Loc,
                          Prefix         => New_Occurrence_Of (Prim, Loc),
-                         Attribute_Name => Name_Unrestricted_Access)))));
+                         Attribute_Name => Name_Unrestricted_Access))));
+
+               if No (Actions (N)) then
+                  Set_Actions (N, L);
+
+               else
+                  Append_List (L, Actions (N));
+               end if;
             end if;
 
             --  Skip the tag of the predefined primitives dispatch table
@@ -7866,6 +7947,8 @@ package body Exp_Ch6 is
          declare
             Typ : constant Entity_Id := Scope (DTC_Entity (Subp));
 
+            L : List_Id;
+
          begin
             --  Handle private overridden primitives
 
@@ -7905,8 +7988,17 @@ package body Exp_Ch6 is
                      Register_Predefined_DT_Entry (Subp);
                   end if;
 
-                  Insert_Actions_After (N,
-                    Register_Primitive (Loc, Prim => Subp));
+                  L := Register_Primitive (Loc, Prim => Subp);
+
+                  if Is_Empty_List (L) then
+                     null;
+
+                  elsif No (Actions (N)) then
+                     Set_Actions (N, L);
+
+                  else
+                     Append_List (L, Actions (N));
+                  end if;
                end if;
             end if;
          end;
@@ -10127,7 +10219,7 @@ package body Exp_Ch6 is
       pragma Assert (Is_Build_In_Place_Function (Func_Id));
       Func_Typ : constant Entity_Id := Underlying_Type (Etype (Func_Id));
    begin
-      return Requires_Transient_Scope (Func_Typ);
+      return Needs_Secondary_Stack (Func_Typ);
    end Needs_BIP_Alloc_Form;
 
    -------------------------------------

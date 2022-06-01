@@ -292,8 +292,8 @@ package body Exp_Ch5 is
       return
         Nkind (Rhs) = N_Type_Conversion
           and then not Has_Compatible_Representation
-                         (Target_Type  => Etype (Rhs),
-                          Operand_Type => Etype (Expression (Rhs)));
+                         (Target_Typ  => Etype (Rhs),
+                          Operand_Typ => Etype (Expression (Rhs)));
    end Change_Of_Representation;
 
    ------------------------------
@@ -2101,7 +2101,7 @@ package body Exp_Ch5 is
             --  from the Rhs by selected component because they are invisible
             --  in the type of the right-hand side.
 
-            if Stored_Constraint (R_Typ) /= No_Elist then
+            if Present (Stored_Constraint (R_Typ)) then
                declare
                   Assign    : Node_Id;
                   Discr_Val : Elmt_Id;
@@ -2246,9 +2246,15 @@ package body Exp_Ch5 is
              Expression => New_RHS));
 
       --  The left-hand side is not a direct name, but is side-effect free.
-      --  Capture its value in a temporary to avoid multiple evaluations.
+      --  Capture its value in a temporary to avoid generating a procedure.
+      --  We don't do this optimization if the target object's type may need
+      --  finalization actions, because we don't want extra finalizations to
+      --  be done for the temp object, and instead we use the more general
+      --  procedure-based approach below.
 
-      elsif Side_Effect_Free (LHS) then
+      elsif Side_Effect_Free (LHS)
+        and then not Needs_Finalization (Etype (LHS))
+      then
          Ent := Make_Temporary (Loc, 'T');
          Replace_Target_Name (New_RHS);
 
@@ -5197,22 +5203,36 @@ package body Exp_Ch5 is
 
             Ent := First_Entity (Pack);
             while Present (Ent) loop
+               --  Get_Element_Access function with one parameter called
+               --  Position.
+
                if Chars (Ent) = Name_Get_Element_Access
+                 and then Ekind (Ent) = E_Function
                  and then Present (First_Formal (Ent))
                  and then Chars (First_Formal (Ent)) = Name_Position
                  and then No (Next_Formal (First_Formal (Ent)))
                then
+                  pragma Assert (No (Fast_Element_Access_Op));
                   Fast_Element_Access_Op := Ent;
+
+               --  Next or Prev procedure with one parameter called
+               --  Position.
 
                elsif Chars (Ent) = Name_Step
                  and then Ekind (Ent) = E_Procedure
+                 and then Present (First_Formal (Ent))
+                 and then Chars (First_Formal (Ent)) = Name_Position
+                 and then No (Next_Formal (First_Formal (Ent)))
                then
+                  pragma Assert (No (Fast_Step_Op));
                   Fast_Step_Op := Ent;
 
                elsif Chars (Ent) = Name_Reference_Control_Type then
+                  pragma Assert (No (Reference_Control_Type));
                   Reference_Control_Type := Ent;
 
                elsif Chars (Ent) = Name_Pseudo_Reference then
+                  pragma Assert (No (Pseudo_Reference));
                   Pseudo_Reference := Ent;
                end if;
 

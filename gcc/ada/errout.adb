@@ -51,6 +51,7 @@ with Sinfo.Utils;    use Sinfo.Utils;
 with Snames;         use Snames;
 with Stand;          use Stand;
 with Stylesw;        use Stylesw;
+with System.OS_Lib;
 with Uname;          use Uname;
 
 package body Errout is
@@ -896,12 +897,19 @@ package body Errout is
    -- Error_Msg_GNAT_Extension --
    ------------------------------
 
-   procedure Error_Msg_GNAT_Extension (Extension : String) is
-      Loc : constant Source_Ptr := Token_Ptr;
+   procedure Error_Msg_GNAT_Extension (Extension : String; Loc : Source_Ptr) is
    begin
       if not Extensions_Allowed then
-         Error_Msg (Extension & " is a 'G'N'A'T specific extension", Loc);
-         Error_Msg ("\unit must be compiled with -gnatX switch", Loc);
+         Error_Msg (Extension & " is a 'G'N'A'T-specific extension", Loc);
+
+         if No (Ada_Version_Pragma) then
+            Error_Msg ("\unit must be compiled with -gnatX "
+                       & "or use pragma Extensions_Allowed (On)", Loc);
+         else
+            Error_Msg_Sloc := Sloc (Ada_Version_Pragma);
+            Error_Msg ("\incompatible with Ada version set#", Loc);
+            Error_Msg ("\must use pragma Extensions_Allowed (On)", Loc);
+         end if;
       end if;
    end Error_Msg_GNAT_Extension;
 
@@ -2075,6 +2083,7 @@ package body Errout is
       --  Return True if E is a continuation message.
 
       procedure Write_JSON_Escaped_String (Str : String_Ptr);
+      procedure Write_JSON_Escaped_String (Str : String);
       --  Write each character of Str, taking care of preceding each quote and
       --  backslash with a backslash. Note that this escaping differs from what
       --  GCC does.
@@ -2107,9 +2116,9 @@ package body Errout is
       -- Write_JSON_Escaped_String --
       -------------------------------
 
-      procedure Write_JSON_Escaped_String (Str : String_Ptr) is
+      procedure Write_JSON_Escaped_String (Str : String) is
       begin
-         for C of Str.all loop
+         for C of Str loop
             if C = '"' or else C = '\' then
                Write_Char ('\');
             end if;
@@ -2118,14 +2127,30 @@ package body Errout is
          end loop;
       end Write_JSON_Escaped_String;
 
+      -------------------------------
+      -- Write_JSON_Escaped_String --
+      -------------------------------
+
+      procedure Write_JSON_Escaped_String (Str : String_Ptr) is
+      begin
+         Write_JSON_Escaped_String (Str.all);
+      end Write_JSON_Escaped_String;
+
       -------------------------
       -- Write_JSON_Location --
       -------------------------
 
       procedure Write_JSON_Location (Sptr : Source_Ptr) is
+         Name : constant File_Name_Type :=
+           Full_Ref_Name (Get_Source_File_Index (Sptr));
       begin
          Write_Str ("{""file"":""");
-         Write_Name (Full_Ref_Name (Get_Source_File_Index (Sptr)));
+         if Full_Path_Name_For_Brief_Errors then
+            Write_JSON_Escaped_String
+              (System.OS_Lib.Normalize_Pathname (Get_Name_String (Name)));
+         else
+            Write_Name (Name);
+         end if;
          Write_Str (""",""line"":");
          Write_Int (Pos (Get_Physical_Line_Number (Sptr)));
          Write_Str (", ""column"":");
@@ -2163,6 +2188,9 @@ package body Errout is
       --  Do not print continuations messages as children of the current
       --  message if the current message is a continuation message.
 
+      Option : constant String := Get_Warning_Option (E);
+      --  The option that triggered this message.
+
    --  Start of processing for Output_JSON_Message
 
    begin
@@ -2190,9 +2218,16 @@ package body Errout is
          Write_Str ("}");
       end if;
 
+      Write_Str ("]");
+
+      --  Print message option, if there is one
+      if Option /= "" then
+         Write_Str (",""option"":""" & Option & """");
+      end if;
+
       --  Print message content
 
-      Write_Str ("],""message"":""");
+      Write_Str (",""message"":""");
       Write_JSON_Escaped_String (Errors.Table (E).Text);
       Write_Str ("""");
 
@@ -3760,7 +3795,7 @@ package body Errout is
          Set_Msg_Str ("<error>");
 
       else
-         Get_Unit_Name_String (Error_Msg_Unit_1, Suffix);
+         Get_Unit_Name_String (Global_Name_Buffer, Error_Msg_Unit_1, Suffix);
          Set_Msg_Blank;
          Set_Msg_Quote;
          Set_Msg_Name_Buffer;

@@ -428,6 +428,7 @@ package Rtsfind is
       System_Put_Images,
       System_Put_Task_Images,
       System_Relative_Delays,
+      System_Return_Stack,
       System_RPC,
       System_Scalar_Values,
       System_Secondary_Stack,
@@ -539,13 +540,11 @@ package Rtsfind is
    --  value is required syntactically, but no real entry is required or
    --  needed. Use of this value will cause a fatal error in an RTE call.
 
-   --  Note that under no circumstances can any of these entities be defined
-   --  more than once in a given package, i.e. no overloading is allowed for
-   --  any entity that is found using rtsfind. A fatal error is given if this
-   --  rule is violated. The one exception is for Save_Occurrence, where the
-   --  RM mandates the overloading. In this case, the compiler only uses the
-   --  procedure, not the function, and the procedure must come first so that
-   --  the compiler finds it and not the function.
+   --  It is normally not allowed to have more than one of these entities with
+   --  the same name in a given package. The one exception is Save_Occurrence,
+   --  where the RM mandates the overloading. In this case, the compiler uses
+   --  the procedure, not the function, and the procedure must come first so
+   --  that the compiler finds it and not the function.
 
    type RE_Id is (
 
@@ -1842,6 +1841,9 @@ package Rtsfind is
      RE_Tk_Union,                        -- System.Partition_Interface
 
      RO_RD_Delay_For,                    -- System.Relative_Delays
+
+     RE_RS_Allocate,                     -- System.Return_Stack
+     RE_RS_Pool,                         -- System.Return_Stack
 
      RE_IS_Is1,                          -- System.Scalar_Values
      RE_IS_Is2,                          -- System.Scalar_Values
@@ -3535,6 +3537,9 @@ package Rtsfind is
 
      RO_RD_Delay_For                     => System_Relative_Delays,
 
+     RE_RS_Allocate                      => System_Return_Stack,
+     RE_RS_Pool                          => System_Return_Stack,
+
      RE_Do_Apc                           => System_RPC,
      RE_Do_Rpc                           => System_RPC,
      RE_Params_Stream_Type               => System_RPC,
@@ -4021,6 +4026,7 @@ package Rtsfind is
       System_Fat_LLF          => True,
       System_Fat_SFlt         => True,
       System_Machine_Code     => True,
+      System_Return_Stack     => True,
       System_Secondary_Stack  => True,
       System_Storage_Elements => True,
       System_Task_Info        => True,
