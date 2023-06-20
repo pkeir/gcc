@@ -1,5 +1,5 @@
 /* Thread edges through blocks and update the control flow and SSA graphs.
-   Copyright (C) 2004-2022 Free Software Foundation, Inc.
+   Copyright (C) 2004-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -508,31 +508,6 @@ fwd_jt_path_registry::lookup_redirection_data (edge e, insert_option insert)
 	}
 
       return elt;
-    }
-}
-
-/* Similar to copy_phi_args, except that the PHI arg exists, it just
-   does not have a value associated with it.  */
-
-static void
-copy_phi_arg_into_existing_phi (edge src_e, edge tgt_e)
-{
-  int src_idx = src_e->dest_idx;
-  int tgt_idx = tgt_e->dest_idx;
-
-  /* Iterate over each PHI in e->dest.  */
-  for (gphi_iterator gsi = gsi_start_phis (src_e->dest),
-			   gsi2 = gsi_start_phis (tgt_e->dest);
-       !gsi_end_p (gsi);
-       gsi_next (&gsi), gsi_next (&gsi2))
-    {
-      gphi *src_phi = gsi.phi ();
-      gphi *dest_phi = gsi2.phi ();
-      tree val = gimple_phi_arg_def (src_phi, src_idx);
-      location_t locus = gimple_phi_arg_location (src_phi, src_idx);
-
-      SET_PHI_ARG_DEF (dest_phi, tgt_idx, val);
-      gimple_phi_arg_set_location (dest_phi, tgt_idx, locus);
     }
 }
 
@@ -2678,7 +2653,10 @@ fwd_jt_path_registry::update_cfg (bool may_peel_loop_headers)
 	for (j = 0; j < path->length (); j++)
 	  {
 	    edge e = (*path)[j]->e;
-	    if (m_removed_edges->find_slot (e, NO_INSERT))
+	    if (m_removed_edges->find_slot (e, NO_INSERT)
+		|| (((*path)[j]->type == EDGE_COPY_SRC_BLOCK
+		     || (*path)[j]->type == EDGE_COPY_SRC_JOINER_BLOCK)
+		    && !can_duplicate_block_p (e->src)))
 	      break;
 	  }
 

@@ -1,5 +1,5 @@
 /* Subroutines used for MIPS code generation.
-   Copyright (C) 1989-2022 Free Software Foundation, Inc.
+   Copyright (C) 1989-2023 Free Software Foundation, Inc.
    Contributed by A. Lichnewsky, lich@inria.inria.fr.
    Changes by Michael Meissner, meissner@osf.org.
    64-bit r4000 support by Ian Lance Taylor, ian@cygnus.com, and
@@ -445,7 +445,6 @@ int num_source_filenames;
 const char *current_function_file = "";
 
 /* Arrays that map GCC register numbers to debugger register numbers.  */
-int mips_dbx_regno[FIRST_PSEUDO_REGISTER];
 int mips_dwarf_regno[FIRST_PSEUDO_REGISTER];
 
 /* Information about the current function's epilogue, used only while
@@ -498,6 +497,9 @@ static int mips_base_target_flags;
 
 /* The default compression mode.  */
 unsigned int mips_base_compression_flags;
+
+/* The default code readable setting.  */
+enum mips_code_readable_setting mips_base_code_readable;
 
 /* The ambient values of other global variables.  */
 static int mips_base_schedule_insns; /* flag_schedule_insns */
@@ -603,6 +605,7 @@ const enum reg_class mips_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   ALL_REGS,	ALL_REGS,	ALL_REGS,	ALL_REGS
 };
 
+static tree mips_handle_code_readable_attr (tree *, tree, tree, int, bool *);
 static tree mips_handle_interrupt_attr (tree *, tree, tree, int, bool *);
 static tree mips_handle_use_shadow_register_set_attr (tree *, tree, tree, int,
 						      bool *);
@@ -624,6 +627,8 @@ static const struct attribute_spec mips_attribute_table[] = {
   { "micromips",   0, 0, true,  false, false, false, NULL, NULL },
   { "nomicromips", 0, 0, true,  false, false, false, NULL, NULL },
   { "nocompression", 0, 0, true,  false, false, false, NULL, NULL },
+  { "code_readable", 0, 1, true,  false, false, false,
+    mips_handle_code_readable_attr, NULL },
   /* Allow functions to be specified as interrupt handlers */
   { "interrupt",   0, 1, false, true,  true, false, mips_handle_interrupt_attr,
     NULL },
@@ -631,6 +636,7 @@ static const struct attribute_spec mips_attribute_table[] = {
     mips_handle_use_shadow_register_set_attr, NULL },
   { "keep_interrupts_masked",	0, 0, false, true,  true, false, NULL, NULL },
   { "use_debug_exception_return", 0, 0, false, true, true, false, NULL, NULL },
+  { "use_hazard_barrier_return", 0, 0, true, false, false, false, NULL, NULL },
   { NULL,	   0, 0, false, false, false, false, NULL, NULL }
 };
 
@@ -1309,6 +1315,81 @@ mips_use_debug_exception_return_p (tree type)
   return lookup_attribute ("use_debug_exception_return",
 			   TYPE_ATTRIBUTES (type)) != NULL;
 }
+
+
+/* Verify the arguments to a code_readable attribute.  */
+
+static tree
+mips_handle_code_readable_attr (tree *node ATTRIBUTE_UNUSED, tree name,
+				tree args, int flags ATTRIBUTE_UNUSED,
+				bool *no_add_attrs)
+{
+  if (!is_attribute_p ("code_readable", name) || args == NULL)
+    return NULL_TREE;
+
+  if (TREE_CODE (TREE_VALUE (args)) != STRING_CST)
+    {
+      warning (OPT_Wattributes,
+	       "%qE attribute requires a string argument", name);
+      *no_add_attrs = true;
+    }
+  else if (strcmp (TREE_STRING_POINTER (TREE_VALUE (args)), "no") != 0
+	   && strcmp (TREE_STRING_POINTER (TREE_VALUE (args)), "pcrel") != 0
+	   && strcmp (TREE_STRING_POINTER (TREE_VALUE (args)), "yes") != 0)
+    {
+      warning (OPT_Wattributes,
+	       "argument to %qE attribute is neither no, pcrel nor yes", name);
+      *no_add_attrs = true;
+    }
+
+  return NULL_TREE;
+}
+
+/* Determine the code_readable setting for a function if it has one.  Set
+   *valid to true if we have a properly formed argument and
+   return the result.  If there's no argument, return GCC's default.
+   Otherwise, leave valid false and return mips_base_code_readable.  In
+   that case the result should be unused anyway.  */
+
+static enum mips_code_readable_setting
+mips_get_code_readable_attr (tree decl)
+{
+  tree attr;
+
+  if (decl == NULL)
+    return mips_base_code_readable;
+
+  attr = lookup_attribute ("code_readable", DECL_ATTRIBUTES (decl));
+
+  if (attr != NULL)
+    {
+      if (TREE_VALUE (attr) != NULL_TREE)
+	{
+	  const char * str;
+
+	  str = TREE_STRING_POINTER (TREE_VALUE (TREE_VALUE (attr)));
+	  if (strcmp (str, "no") == 0)
+	    return CODE_READABLE_NO;
+	  else if (strcmp (str, "pcrel") == 0)
+	    return CODE_READABLE_PCREL;
+	  else if (strcmp (str, "yes") == 0)
+	    return CODE_READABLE_YES;
+
+	  /* mips_handle_code_readable_attr will have verified the
+	     arguments are correct before adding the attribute.  */
+	  gcc_unreachable ();
+	}
+
+      /* Just like GCC's default -mcode-readable= setting, the
+	 presence of the code_readable attribute implies that a
+	 function can read data from the instruction stream by
+	 default.  */
+      return CODE_READABLE_YES;
+    }
+
+  return mips_base_code_readable;
+}
+
 
 /* Return the set of compression modes that are explicitly required
    by the attributes in ATTRIBUTES.  */
@@ -6684,7 +6765,8 @@ mips_setup_incoming_varargs (cumulative_args_t cum,
      argument.  Advance a local copy of CUM past the last "real" named
      argument, to find out how many registers are left over.  */
   local_cum = *get_cumulative_args (cum);
-  mips_function_arg_advance (pack_cumulative_args (&local_cum), arg);
+  if (!TYPE_NO_NAMED_ARGS_STDARG_P (TREE_TYPE (current_function_decl)))
+    mips_function_arg_advance (pack_cumulative_args (&local_cum), arg);
 
   /* Found out how many registers we need to save.  */
   gp_saved = MAX_ARGS_IN_REGISTERS - local_cum.num_gprs;
@@ -9595,10 +9677,6 @@ mips_output_filename (FILE *stream, const char *name)
       output_quoted_string (stream, name);
       putc ('\n', stream);
     }
-  /* If we are emitting stabs, let dbxout.cc handle this (except for
-     the mips_output_filename_first_time case).  */
-  else if (write_symbols == DBX_DEBUG)
-    return;
   else if (name != current_function_file
 	   && strcmp (name, current_function_file) != 0)
     {
@@ -9841,7 +9919,7 @@ mips_output_aligned_decl_common (FILE *stream, tree decl, const char *name,
      .rdata then don't put them in .comm.  */
   if (TARGET_EMBEDDED_DATA
       && TARGET_UNINIT_CONST_IN_RODATA
-      && TREE_CODE (decl) == VAR_DECL
+      && VAR_P (decl)
       && TREE_READONLY (decl)
       && (DECL_INITIAL (decl) == 0 || DECL_INITIAL (decl) == error_mark_node))
     {
@@ -9926,7 +10004,7 @@ mips_finish_declare_object (FILE *stream, tree decl, int top_level, int at_end)
 void
 mips_set_text_contents_type (FILE *file ATTRIBUTE_UNUSED,
 			     const char *prefix ATTRIBUTE_UNUSED,
-			     unsigned long num ATTRIBUTE_UNUSED,
+			     unsigned HOST_WIDE_INT num ATTRIBUTE_UNUSED,
 			     bool function_p ATTRIBUTE_UNUSED)
 {
 #ifdef ASM_OUTPUT_TYPE_DIRECTIVE
@@ -9935,7 +10013,7 @@ mips_set_text_contents_type (FILE *file ATTRIBUTE_UNUSED,
   char *sname;
   rtx symbol;
 
-  sprintf (buf, "%lu", num);
+  sprintf (buf, HOST_WIDE_INT_PRINT_UNSIGNED, num);
   symbol = XEXP (DECL_RTL (current_function_decl), 0);
   fnname = targetm.strip_name_encoding (XSTR (symbol, 0));
   sname = ACONCAT ((prefix, fnname, "_", buf, NULL));
@@ -13614,6 +13692,9 @@ mips_autovectorize_vector_modes (vector_modes *modes, bool)
   return 0;
 }
 
+
+static GTY (()) rtx speculation_barrier_libfunc;
+
 /* Implement TARGET_INIT_LIBFUNCS.  */
 
 static void
@@ -13683,6 +13764,7 @@ mips_init_libfuncs (void)
       synchronize_libfunc = init_one_libfunc ("__sync_synchronize");
       init_sync_libfuncs (UNITS_PER_WORD);
     }
+  speculation_barrier_libfunc = init_one_libfunc ("__speculation_barrier");
 }
 
 /* Build up a multi-insn sequence that loads label TARGET into $AT.  */
@@ -19095,6 +19177,14 @@ mips_avoid_hazard (rtx_insn *after, rtx_insn *insn, int *hilo_delay,
       }
 }
 
+/* Emit a speculation barrier.
+   JR.HB is needed, so we put speculation_barrier_libfunc in libgcc.  */
+void
+mips_emit_speculation_barrier_function ()
+{
+  emit_library_call (speculation_barrier_libfunc, LCT_NORMAL, VOIDmode);
+}
+
 /* A SEQUENCE is breakable iff the branch inside it has a compact form
    and the target has compact branches.  */
 
@@ -19908,12 +19998,25 @@ mips_set_compression_mode (unsigned int compression_mode)
 
 /* Implement TARGET_SET_CURRENT_FUNCTION.  Decide whether the current
    function should use the MIPS16 or microMIPS ISA and switch modes
-   accordingly.  */
+   accordingly.  Also set the current code_readable mode.  */
 
 static void
 mips_set_current_function (tree fndecl)
 {
+  enum mips_code_readable_setting old_code_readable = mips_code_readable;
+
   mips_set_compression_mode (mips_get_compress_mode (fndecl));
+
+  mips_code_readable = mips_get_code_readable_attr (fndecl);
+
+  /* Since the mips_code_readable setting has potentially changed, the
+     relocation tables must be reinitialized.  Otherwise GCC will not
+     split symbols for functions that are code_readable ("no") when others
+     are code_readable ("yes") and ICE later on in places such as
+     mips_emit_move.  Ditto for similar paired cases.  It must be restored
+     to its previous state as well.  */
+  if (old_code_readable != mips_code_readable)
+    mips_init_relocs ();
 }
 
 /* Allocate a chunk of memory for per-function machine-dependent data.  */
@@ -20023,7 +20126,7 @@ mips_set_tune (const struct mips_cpu_info *info)
 static void
 mips_option_override (void)
 {
-  int i, start, regno, mode;
+  int i, regno, mode;
 
   if (OPTION_SET_P (mips_isa_option))
     mips_isa_option_info = &mips_cpu_info_table[mips_isa_option];
@@ -20045,6 +20148,7 @@ mips_option_override (void)
      were generating uncompressed code.  */
   mips_base_compression_flags = TARGET_COMPRESSION;
   target_flags &= ~TARGET_COMPRESSION;
+  mips_base_code_readable = mips_code_readable;
 
   /* -mno-float overrides -mhard-float and -msoft-float.  */
   if (TARGET_NO_FLOAT)
@@ -20282,13 +20386,7 @@ mips_option_override (void)
       target_flags |= MASK_ODD_SPREG;
     }
 
-  if (!ISA_HAS_COMPACT_BRANCHES && mips_cb == MIPS_CB_ALWAYS)
-    {
-      error ("unsupported combination: %qs%s %s",
-	      mips_arch_info->name, TARGET_MICROMIPS ? " -mmicromips" : "",
-	      "-mcompact-branches=always");
-    }
-  else if (!ISA_HAS_DELAY_SLOTS && mips_cb == MIPS_CB_NEVER)
+  if (!ISA_HAS_DELAY_SLOTS && mips_cb == MIPS_CB_NEVER)
     {
       error ("unsupported combination: %qs%s %s",
 	      mips_arch_info->name, TARGET_MICROMIPS ? " -mmicromips" : "",
@@ -20505,24 +20603,13 @@ mips_option_override (void)
 
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     {
-      mips_dbx_regno[i] = IGNORED_DWARF_REGNUM;
       if (GP_REG_P (i) || FP_REG_P (i) || ALL_COP_REG_P (i))
 	mips_dwarf_regno[i] = i;
       else
 	mips_dwarf_regno[i] = INVALID_REGNUM;
     }
 
-  start = GP_DBX_FIRST - GP_REG_FIRST;
-  for (i = GP_REG_FIRST; i <= GP_REG_LAST; i++)
-    mips_dbx_regno[i] = i + start;
-
-  start = FP_DBX_FIRST - FP_REG_FIRST;
-  for (i = FP_REG_FIRST; i <= FP_REG_LAST; i++)
-    mips_dbx_regno[i] = i + start;
-
   /* Accumulator debug registers use big-endian ordering.  */
-  mips_dbx_regno[HI_REGNUM] = MD_DBX_FIRST + 0;
-  mips_dbx_regno[LO_REGNUM] = MD_DBX_FIRST + 1;
   mips_dwarf_regno[HI_REGNUM] = MD_REG_FIRST + 0;
   mips_dwarf_regno[LO_REGNUM] = MD_REG_FIRST + 1;
   for (i = DSP_ACC_REG_FIRST; i <= DSP_ACC_REG_LAST; i += 2)
@@ -22743,7 +22830,12 @@ mips_constant_alignment (const_tree exp, HOST_WIDE_INT align)
 static unsigned HOST_WIDE_INT
 mips_asan_shadow_offset (void)
 {
-  return SUBTARGET_SHADOW_OFFSET;
+  if (mips_abi == ABI_N32)
+    return (HOST_WIDE_INT_1 << 29);
+  if (POINTER_SIZE == 64)
+    return (HOST_WIDE_INT_1 << 37);
+  else
+    return HOST_WIDE_INT_C (0x0aaa0000);
 }
 
 /* Implement TARGET_STARTING_FRAME_OFFSET.  See mips_compute_frame_info

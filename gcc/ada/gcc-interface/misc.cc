@@ -6,7 +6,7 @@
  *                                                                          *
  *                           C Implementation File                          *
  *                                                                          *
- *          Copyright (C) 1992-2021, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2023, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -267,9 +267,6 @@ gnat_post_options (const char **pfilename ATTRIBUTE_UNUSED)
   /* No return type warnings for Ada.  */
   warn_return_type = 0;
 
-  /* No string overflow warnings for Ada.  */
-  warn_stringop_overflow = 0;
-
   /* No caret by default for Ada.  */
   if (!OPTION_SET_P (flag_diagnostics_show_caret))
     global_dc->show_caret = false;
@@ -333,13 +330,23 @@ internal_error_function (diagnostic_context *context, const char *msgid,
   sp.Bounds = &temp;
   sp.Array = buffer;
 
-  xloc = expand_location (input_location);
-  if (context->show_column && xloc.column != 0)
-    loc = xasprintf ("%s:%d:%d", xloc.file, xloc.line, xloc.column);
+  if (input_location == UNKNOWN_LOCATION)
+    {
+      loc = NULL;
+      temp_loc.Low_Bound = 1;
+      temp_loc.High_Bound = 0;
+    }
   else
-    loc = xasprintf ("%s:%d", xloc.file, xloc.line);
-  temp_loc.Low_Bound = 1;
-  temp_loc.High_Bound = strlen (loc);
+    {
+      xloc = expand_location (input_location);
+      if (context->show_column && xloc.column != 0)
+	loc = xasprintf ("%s:%d:%d", xloc.file, xloc.line, xloc.column);
+      else
+	loc = xasprintf ("%s:%d", xloc.file, xloc.line);
+      temp_loc.Low_Bound = 1;
+      temp_loc.High_Bound = strlen (loc);
+    }
+
   sp_loc.Bounds = &temp_loc;
   sp_loc.Array = loc;
 
@@ -684,7 +691,6 @@ gnat_type_hash_eq (const_tree t1, const_tree t2)
 {
   gcc_assert (FUNC_OR_METHOD_TYPE_P (t1) && TREE_CODE (t1) == TREE_CODE (t2));
   return fntype_same_flags_p (t1, TYPE_CI_CO_LIST (t2),
-			      TYPE_RETURN_UNCONSTRAINED_P (t2),
 			      TYPE_RETURN_BY_DIRECT_REF_P (t2),
 			      TREE_ADDRESSABLE (t2));
 }
@@ -1293,6 +1299,15 @@ gnat_eh_personality (void)
   return gnat_eh_personality_decl;
 }
 
+/* Get a value for the SARIF v2.1.0 "artifact.sourceLanguage" property,
+   based on the list in SARIF v2.1.0 Appendix J.  */
+
+static const char *
+gnat_get_sarif_source_language (const char *)
+{
+  return "ada";
+}
+
 /* Initialize language-specific bits of tree_contains_struct.  */
 
 static void
@@ -1301,6 +1316,7 @@ gnat_init_ts (void)
   MARK_TS_COMMON (UNCONSTRAINED_ARRAY_TYPE);
 
   MARK_TS_TYPED (UNCONSTRAINED_ARRAY_REF);
+  MARK_TS_TYPED (LOAD_EXPR);
   MARK_TS_TYPED (NULL_EXPR);
   MARK_TS_TYPED (PLUS_NOMOD_EXPR);
   MARK_TS_TYPED (MINUS_NOMOD_EXPR);
@@ -1415,6 +1431,8 @@ get_lang_specific (tree node)
 #define LANG_HOOKS_DEEP_UNSHARING	true
 #undef  LANG_HOOKS_CUSTOM_FUNCTION_DESCRIPTORS
 #define LANG_HOOKS_CUSTOM_FUNCTION_DESCRIPTORS true
+#undef LANG_HOOKS_GET_SARIF_SOURCE_LANGUAGE
+#define LANG_HOOKS_GET_SARIF_SOURCE_LANGUAGE gnat_get_sarif_source_language
 
 struct lang_hooks lang_hooks = LANG_HOOKS_INITIALIZER;
 

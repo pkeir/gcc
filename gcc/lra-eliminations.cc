@@ -1,5 +1,5 @@
 /* Code for RTL register eliminations.
-   Copyright (C) 2010-2022 Free Software Foundation, Inc.
+   Copyright (C) 2010-2023 Free Software Foundation, Inc.
    Contributed by Vladimir Makarov <vmakarov@redhat.com>.
 
 This file is part of GCC.
@@ -1307,6 +1307,16 @@ init_elimination (void)
     }
   setup_elimination_map ();
 }
+
+/* Update and return stack pointer OFFSET after processing X.  */
+poly_int64
+lra_update_sp_offset (rtx x, poly_int64 offset)
+{
+  curr_sp_change = offset;
+  mark_not_eliminable (x, VOIDmode);
+  return curr_sp_change;
+}
+
 
 /* Eliminate hard reg given by its location LOC.  */
 void

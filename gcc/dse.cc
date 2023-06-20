@@ -1,5 +1,5 @@
 /* RTL dead store elimination.
-   Copyright (C) 2005-2022 Free Software Foundation, Inc.
+   Copyright (C) 2005-2023 Free Software Foundation, Inc.
 
    Contributed by Richard Sandiford <rsandifor@codesourcery.com>
    and Kenneth Zadeck <zadeck@naturalbridge.com>
@@ -250,6 +250,9 @@ public:
   /* The number of bytes covered by the operation.  This is always exact
      and known (rather than -1).  */
   poly_int64 width;
+
+  /* The address space that the memory reference uses.  */
+  unsigned char addrspace;
 
   union
     {
@@ -1508,6 +1511,14 @@ record_store (rtx body, bb_info_t bb_info)
 
 	  if (tem && CONSTANT_P (tem))
 	    const_rhs = tem;
+	  else
+	    {
+	      /* If RHS is set only once to a constant, set CONST_RHS
+		 to the constant.  */
+	      rtx def_src = df_find_single_def_src (rhs);
+	      if (def_src != nullptr && CONSTANT_P (def_src))
+		const_rhs = def_src;
+	    }
 	}
     }
 
@@ -1516,6 +1527,7 @@ record_store (rtx body, bb_info_t bb_info)
   ptr = active_local_stores;
   last = NULL;
   redundant_reason = NULL;
+  unsigned char addrspace = MEM_ADDR_SPACE (mem);
   mem = canon_rtx (mem);
 
   if (group_id < 0)
@@ -1540,7 +1552,9 @@ record_store (rtx body, bb_info_t bb_info)
       while (!s_info->is_set)
 	s_info = s_info->next;
 
-      if (s_info->group_id == group_id && s_info->cse_base == base)
+      if (s_info->group_id == group_id
+	  && s_info->cse_base == base
+	  && s_info->addrspace == addrspace)
 	{
 	  HOST_WIDE_INT i;
 	  if (dump_file && (dump_flags & TDF_DETAILS))
@@ -1562,12 +1576,7 @@ record_store (rtx body, bb_info_t bb_info)
 					 width)
 	      /* We can only remove the later store if the earlier aliases
 		 at least all accesses the later one.  */
-	      && ((MEM_ALIAS_SET (mem) == MEM_ALIAS_SET (s_info->mem)
-		   || alias_set_subset_of (MEM_ALIAS_SET (mem),
-					   MEM_ALIAS_SET (s_info->mem)))
-		  && (!MEM_EXPR (s_info->mem)
-		      || refs_same_for_tbaa_p (MEM_EXPR (s_info->mem),
-					       MEM_EXPR (mem)))))
+	      && mems_same_for_tbaa_p (s_info->mem, mem))
 	    {
 	      if (GET_MODE (mem) == BLKmode)
 		{
@@ -1685,6 +1694,7 @@ record_store (rtx body, bb_info_t bb_info)
   store_info->rhs = rhs;
   store_info->const_rhs = const_rhs;
   store_info->redundant_reason = redundant_reason;
+  store_info->addrspace = addrspace;
 
   /* If this is a clobber, we return 0.  We will only be able to
      delete this insn if there is only one store USED store, but we
@@ -2009,7 +2019,19 @@ replace_read (store_info *store_info, insn_info_t store_insn,
     }
   /* Force the value into a new register so that it won't be clobbered
      between the store and the load.  */
-  read_reg = copy_to_mode_reg (read_mode, read_reg);
+  if (WORD_REGISTER_OPERATIONS
+      && GET_CODE (read_reg) == SUBREG
+      && REG_P (SUBREG_REG (read_reg))
+      && GET_MODE (SUBREG_REG (read_reg)) == word_mode)
+    {
+      /* For WORD_REGISTER_OPERATIONS with subreg of word_mode register
+	 force SUBREG_REG into a new register rather than the SUBREG.  */
+      rtx r = copy_to_mode_reg (word_mode, SUBREG_REG (read_reg));
+      read_reg = shallow_copy_rtx (read_reg);
+      SUBREG_REG (read_reg) = r;
+    }
+  else
+    read_reg = copy_to_mode_reg (read_mode, read_reg);
   insns = get_insns ();
   end_sequence ();
 
@@ -3747,12 +3769,15 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual bool gate (function *)
+  bool gate (function *) final override
     {
       return optimize > 0 && flag_dse && dbg_cnt (dse1);
     }
 
-  virtual unsigned int execute (function *) { return rest_of_handle_dse (); }
+  unsigned int execute (function *) final override
+  {
+    return rest_of_handle_dse ();
+  }
 
 }; // class pass_rtl_dse1
 
@@ -3787,12 +3812,15 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual bool gate (function *)
+  bool gate (function *) final override
     {
       return optimize > 0 && flag_dse && dbg_cnt (dse2);
     }
 
-  virtual unsigned int execute (function *) { return rest_of_handle_dse (); }
+  unsigned int execute (function *) final override
+  {
+    return rest_of_handle_dse ();
+  }
 
 }; // class pass_rtl_dse2
 

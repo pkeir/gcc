@@ -1,5 +1,5 @@
 /* Induction variable optimizations.
-   Copyright (C) 2003-2022 Free Software Foundation, Inc.
+   Copyright (C) 2003-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -131,6 +131,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "builtins.h"
 #include "tree-vectorizer.h"
 #include "dbgcnt.h"
+#include "cfganal.h"
 
 /* For lang_hooks.types.type_for_mode.  */
 #include "langhooks.h"
@@ -469,7 +470,7 @@ struct iv_cand
   bitmap inv_vars;	/* The list of invariant ssa_vars used in step of the
 			   iv_cand.  */
   bitmap inv_exprs;	/* If step is more complicated than a single ssa_var,
-			   hanlde it as a new invariant expression which will
+			   handle it as a new invariant expression which will
 			   be hoisted out of loop.  */
   struct iv *orig_iv;	/* The original iv if this cand is added from biv with
 			   smaller type.  */
@@ -936,7 +937,7 @@ stmt_after_ip_normal_pos (class loop *loop, gimple *stmt)
   if (sbb != bb)
     return false;
 
-  return stmt == last_stmt (bb);
+  return stmt == last_nondebug_stmt (bb);
 }
 
 /* Returns true if STMT if after the place where the original induction
@@ -3071,13 +3072,18 @@ get_loop_invariant_expr (struct ivopts_data *data, tree inv_expr)
   return *slot;
 }
 
-/* Find the first undefined SSA name in *TP.  */
+
+/* Return *TP if it is an SSA_NAME marked with TREE_VISITED, i.e., as
+   unsuitable as ivopts candidates for potentially involving undefined
+   behavior.  */
 
 static tree
-find_ssa_undef (tree *tp, int *walk_subtrees, void *)
+find_ssa_undef (tree *tp, int *walk_subtrees, void *bb_)
 {
+  basic_block bb = (basic_block) bb_;
   if (TREE_CODE (*tp) == SSA_NAME
-      && ssa_undefined_value_p (*tp, false))
+      && ssa_name_maybe_undef_p (*tp)
+      && !ssa_name_any_use_dominates_bb_p (*tp, bb))
     return *tp;
   if (!EXPR_P (*tp))
     *walk_subtrees = 0;
@@ -3114,7 +3120,7 @@ add_candidate_1 (struct ivopts_data *data, tree base, tree step, bool important,
   /* If BASE contains undefined SSA names make sure we only record
      the original IV.  */
   bool involves_undefs = false;
-  if (walk_tree (&base, find_ssa_undef, NULL, NULL))
+  if (walk_tree (&base, find_ssa_undef, data->current_loop->header, NULL))
     {
       if (pos != IP_ORIGINAL)
 	return NULL;
@@ -5391,7 +5397,7 @@ may_eliminate_iv (struct ivopts_data *data,
   /* For now works only for exits that dominate the loop latch.
      TODO: extend to other conditions inside loop body.  */
   ex_bb = gimple_bb (use->stmt);
-  if (use->stmt != last_stmt (ex_bb)
+  if (use->stmt != last_nondebug_stmt (ex_bb)
       || gimple_code (use->stmt) != GIMPLE_COND
       || !dominated_by_p (CDI_DOMINATORS, loop->latch, ex_bb))
     return false;
@@ -7230,6 +7236,12 @@ create_new_iv (struct ivopts_data *data, struct iv_cand *cand)
     case IP_END:
       incr_pos = gsi_last_bb (ip_end_pos (data->current_loop));
       after = true;
+      if (!gsi_end_p (incr_pos) && stmt_ends_bb_p (gsi_stmt (incr_pos)))
+	{
+	  edge e = find_edge (gsi_bb (incr_pos), data->current_loop->header);
+	  incr_pos = gsi_after_labels (split_edge (e));
+	  after = false;
+	}
       break;
 
     case IP_AFTER_USE:
@@ -7255,7 +7267,7 @@ create_new_iv (struct ivopts_data *data, struct iv_cand *cand)
 
   base = unshare_expr (cand->iv->base);
 
-  create_iv (base, unshare_expr (cand->iv->step),
+  create_iv (base, PLUS_EXPR, unshare_expr (cand->iv->step),
 	     cand->var_before, data->current_loop,
 	     &incr_pos, after, &cand->var_before, &cand->var_after);
 }
@@ -8119,7 +8131,8 @@ tree_ssa_iv_optimize_loop (struct ivopts_data *data, class loop *loop,
 	{
 	  fprintf (dump_file, "  single exit %d -> %d, exit condition ",
 		   exit->src->index, exit->dest->index);
-	  print_gimple_stmt (dump_file, last_stmt (exit->src), 0, TDF_SLIM);
+	  print_gimple_stmt (dump_file, *gsi_last_bb (exit->src),
+			     0, TDF_SLIM);
 	  fprintf (dump_file, "\n");
 	}
 
@@ -8192,6 +8205,7 @@ tree_ssa_iv_optimize (void)
   auto_bitmap toremove;
 
   tree_ssa_iv_optimize_init (&data);
+  mark_ssa_maybe_undefs ();
 
   /* Optimize the loops starting with the innermost ones.  */
   for (auto loop : loops_list (cfun, LI_FROM_INNERMOST))

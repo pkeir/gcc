@@ -1,5 +1,5 @@
 /* Prints out tree in human readable form - GCC
-   Copyright (C) 1990-2022 Free Software Foundation, Inc.
+   Copyright (C) 1990-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -34,6 +34,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfg.h"
 #include "dumpfile.h"
 #include "print-tree.h"
+#include "file-prefix-map.h"
 
 /* Define the hash table of nodes already seen.
    Such nodes are not repeated; brief cross-references are used.  */
@@ -517,8 +518,12 @@ print_node (FILE *file, const char *prefix, tree node, int indent,
 	  fprintf (file, " align:%d warn_if_not_align:%d",
 		   DECL_ALIGN (node), DECL_WARN_IF_NOT_ALIGN (node));
 	  if (code == FIELD_DECL)
-	    fprintf (file, " offset_align " HOST_WIDE_INT_PRINT_UNSIGNED,
-		     DECL_OFFSET_ALIGN (node));
+	    {
+	      fprintf (file, " offset_align " HOST_WIDE_INT_PRINT_UNSIGNED,
+		       DECL_OFFSET_ALIGN (node));
+	      fprintf (file, " decl_not_flexarray: %d",
+		       DECL_NOT_FLEXARRAY (node));
+	    }
 
 	  if (code == FUNCTION_DECL && fndecl_built_in_p (node))
 	    {
@@ -1061,7 +1066,10 @@ print_decl_identifier (FILE *file, tree decl, int flags)
 	{
 	  expanded_location loc
 	    = expand_location (DECL_SOURCE_LOCATION (decl));
-	  fprintf (file, "%s:%d:%d", loc.file, loc.line, loc.column);
+	  const char *f = flags & PRINT_DECL_REMAP_DEBUG
+	    ? remap_debug_filename (loc.file)
+	    : loc.file;
+	  fprintf (file, "%s:%d:%d", f, loc.line, loc.column);
 	}
       needs_colon = true;
     }

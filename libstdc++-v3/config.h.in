@@ -42,6 +42,10 @@
 /* Define to 1 if you have the `at_quick_exit' function. */
 #undef HAVE_AT_QUICK_EXIT
 
+/* Define if C99 float_t and double_t in <math.h> should be imported in
+   <cmath> in namespace std for C++11. */
+#undef HAVE_C99_FLT_EVAL_TYPES
+
 /* Define to 1 if the target assembler supports thread-local storage. */
 #undef HAVE_CC_TLS
 
@@ -250,6 +254,9 @@
 /* Define to 1 if you have the `logl' function. */
 #undef HAVE_LOGL
 
+/* Define if lseek is available in <unistd.h>. */
+#undef HAVE_LSEEK
+
 /* Define to 1 if you have the <machine/endian.h> header file. */
 #undef HAVE_MACHINE_ENDIAN_H
 
@@ -291,6 +298,9 @@
 
 /* Define if <math.h> defines obsolete isnan function. */
 #undef HAVE_OBSOLETE_ISNAN
+
+/* Define if openat is available in <fcntl.h>. */
+#undef HAVE_OPENAT
 
 /* Define if poll is available in <poll.h>. */
 #undef HAVE_POLL
@@ -522,8 +532,8 @@
 /* Define to 1 if you have the <wctype.h> header file. */
 #undef HAVE_WCTYPE_H
 
-/* Defined if Sleep exists. */
-#undef HAVE_WIN32_SLEEP
+/* Define to 1 if you have the <windows.h> header file. */
+#undef HAVE_WINDOWS_H
 
 /* Define if writev is available in <sys/uio.h>. */
 #undef HAVE_WRITEV
@@ -757,21 +767,6 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
-/* The size of `char', as computed by sizeof. */
-#undef SIZEOF_CHAR
-
-/* The size of `int', as computed by sizeof. */
-#undef SIZEOF_INT
-
-/* The size of `long', as computed by sizeof. */
-#undef SIZEOF_LONG
-
-/* The size of `short', as computed by sizeof. */
-#undef SIZEOF_SHORT
-
-/* The size of `void *', as computed by sizeof. */
-#undef SIZEOF_VOID_P
-
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 
@@ -791,8 +786,8 @@
    C99 library functions to be present. */
 #undef _GLIBCXX11_USE_C99_COMPLEX
 
-/* Define if C99 functions or macros in <math.h> should be imported in <cmath>
-   in namespace std for C++11. */
+/* Define if C99 generic macros in <math.h> should be imported in <cmath> in
+   namespace std for C++11. */
 #undef _GLIBCXX11_USE_C99_MATH
 
 /* Define if C99 functions or macros in <stdio.h> should be imported in
@@ -830,6 +825,10 @@
 
 /* Define if the compiler supports C++11 atomics. */
 #undef _GLIBCXX_ATOMIC_BUILTINS
+
+/* Define if global objects can be aligned to
+   std::hardware_destructive_interference_size. */
+#undef _GLIBCXX_CAN_ALIGNAS_DESTRUCTIVE_SIZE
 
 /* Define to use concept checking code from the boost libraries. */
 #undef _GLIBCXX_CONCEPT_CHECKS
@@ -869,6 +868,9 @@
 /* Define if size_t is unsigned int. */
 #undef _GLIBCXX_SIZE_T_IS_UINT
 
+/* Define if static tzdata should be compiled into the library. */
+#undef _GLIBCXX_STATIC_TZDATA
+
 /* Define to the value of the EOF integer constant. */
 #undef _GLIBCXX_STDIO_EOF
 
@@ -901,30 +903,59 @@
    <stdio.h>, and <stdlib.h> can be used or exposed. */
 #undef _GLIBCXX_USE_C99
 
+/* Define if C99 inverse trig functions in <complex.h> should be used in
+   <complex>. Using compiler builtins for these functions requires
+   corresponding C99 library functions to be present. */
+#undef _GLIBCXX_USE_C99_COMPLEX_ARC
+
 /* Define if C99 functions in <complex.h> should be used in <tr1/complex>.
    Using compiler builtins for these functions requires corresponding C99
    library functions to be present. */
 #undef _GLIBCXX_USE_C99_COMPLEX_TR1
 
+/* Define if C99 functions in <ctype.h> should be imported in <cctype> in
+   namespace std for C++11. */
+#undef _GLIBCXX_USE_C99_CTYPE
+
 /* Define if C99 functions in <ctype.h> should be imported in <tr1/cctype> in
    namespace std::tr1. */
 #undef _GLIBCXX_USE_C99_CTYPE_TR1
 
+/* Define if C99 functions in <fenv.h> should be imported in <cfenv> in
+   namespace std for C++11. */
+#undef _GLIBCXX_USE_C99_FENV
+
 /* Define if C99 functions in <fenv.h> should be imported in <tr1/cfenv> in
    namespace std::tr1. */
 #undef _GLIBCXX_USE_C99_FENV_TR1
+
+/* Define if C99 functions in <inttypes.h> should be imported in <cinttypes>
+   in namespace std in C++11. */
+#undef _GLIBCXX_USE_C99_INTTYPES
 
 /* Define if C99 functions in <inttypes.h> should be imported in
    <tr1/cinttypes> in namespace std::tr1. */
 #undef _GLIBCXX_USE_C99_INTTYPES_TR1
 
 /* Define if wchar_t C99 functions in <inttypes.h> should be imported in
+   <cinttypes> in namespace std in C++11. */
+#undef _GLIBCXX_USE_C99_INTTYPES_WCHAR_T
+
+/* Define if wchar_t C99 functions in <inttypes.h> should be imported in
    <tr1/cinttypes> in namespace std::tr1. */
 #undef _GLIBCXX_USE_C99_INTTYPES_WCHAR_T_TR1
+
+/* Define if C99 functions in <math.h> should be imported in <cmath> in
+   namespace std for C++11. */
+#undef _GLIBCXX_USE_C99_MATH_FUNCS
 
 /* Define if C99 functions or macros in <math.h> should be imported in
    <tr1/cmath> in namespace std::tr1. */
 #undef _GLIBCXX_USE_C99_MATH_TR1
+
+/* Define if C99 types in <stdint.h> should be imported in <cstdint> in
+   namespace std for C++11. */
+#undef _GLIBCXX_USE_C99_STDINT
 
 /* Define if C99 types in <stdint.h> should be imported in <tr1/cstdint> in
    namespace std::tr1. */
@@ -939,6 +970,9 @@
 
 /* Defined if clock_gettime has realtime clock support. */
 #undef _GLIBCXX_USE_CLOCK_REALTIME
+
+/* Define if copy_file_range is available in <unistd.h>. */
+#undef _GLIBCXX_USE_COPY_FILE_RANGE
 
 /* Define if ISO/IEC TR 24733 decimal floating point types are supported on
    this host. */
@@ -1040,6 +1074,9 @@
 /* Define if code specialized for wchar_t should be used. */
 #undef _GLIBCXX_USE_WCHAR_T
 
+/* Defined if Sleep exists. */
+#undef _GLIBCXX_USE_WIN32_SLEEP
+
 /* Define to 1 if a verbose library is built, or 0 otherwise. */
 #undef _GLIBCXX_VERBOSE
 
@@ -1048,6 +1085,9 @@
 
 /* Defined if as can handle rdseed. */
 #undef _GLIBCXX_X86_RDSEED
+
+/* Define if a directory should be searched for tzdata files. */
+#undef _GLIBCXX_ZONEINFO_DIR
 
 /* Define to 1 if mutex_timedlock is available. */
 #undef _GTHREAD_USE_MUTEX_TIMEDLOCK

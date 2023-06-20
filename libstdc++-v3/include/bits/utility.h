@@ -1,6 +1,6 @@
 // Utilities used throughout the library -*- C++ -*-
 
-// Copyright (C) 2004-2022 Free Software Foundation, Inc.
+// Copyright (C) 2004-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -86,19 +86,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<size_t __i, typename _Tp>
     struct tuple_element<__i, const _Tp>
     {
-      typedef typename add_const<__tuple_element_t<__i, _Tp>>::type type;
+      using type = const __tuple_element_t<__i, _Tp>;
     };
 
   template<size_t __i, typename _Tp>
     struct tuple_element<__i, volatile _Tp>
     {
-      typedef typename add_volatile<__tuple_element_t<__i, _Tp>>::type type;
+      using type = volatile __tuple_element_t<__i, _Tp>;
     };
 
   template<size_t __i, typename _Tp>
     struct tuple_element<__i, const volatile _Tp>
     {
-      typedef typename add_cv<__tuple_element_t<__i, _Tp>>::type type;
+      using type = const volatile __tuple_element_t<__i, _Tp>;
     };
 
 #if __cplusplus >= 201402L
@@ -125,7 +125,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
 // The standard says this macro and alias template should be in <tuple> but we
-// we define them here, to be available in <array>, <utility> and <ranges> too.
+// define them here, to be available in <array>, <utility> and <ranges> too.
 // _GLIBCXX_RESOLVE_LIB_DEFECTS
 // 3378. tuple_size_v/tuple_element_t should be available when
 //       tuple_size/tuple_element are
@@ -190,7 +190,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #if __cplusplus >= 201703L
 
-  //
   struct in_place_t {
     explicit in_place_t() = default;
   };
@@ -225,6 +224,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif // C++17
 #endif // C++14
 
+#if __has_builtin(__type_pack_element)
+  template<size_t _Np, typename... _Types>
+    struct _Nth_type
+    { using type = __type_pack_element<_Np, _Types...>; };
+#else
   template<size_t _Np, typename... _Types>
     struct _Nth_type
     { };
@@ -262,6 +266,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Tp0, typename _Tp1, typename _Tp2, typename... _Rest>
     struct _Nth_type<1, _Tp0, _Tp1, _Tp2, _Rest...>
     { using type = _Tp1; };
+#endif
+#endif
+
+#if __cplusplus > 202002L
+#define __cpp_lib_ranges_zip 202110L // for <tuple> and <utility>
 #endif
 
 _GLIBCXX_END_NAMESPACE_VERSION

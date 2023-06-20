@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -176,9 +176,7 @@ package body Ada.Directories is
          raise Name_Error with
            "invalid directory path name """ & Containing_Directory & '"';
 
-      elsif
-        Extension'Length = 0 and then (not Is_Valid_Simple_Name (Name))
-      then
+      elsif Extension'Length = 0 and then not Is_Valid_Simple_Name (Name) then
          raise Name_Error with
            "invalid simple name """ & Name & '"';
 

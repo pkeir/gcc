@@ -1,5 +1,5 @@
 /* Search for references that a functions loads or stores.
-   Copyright (C) 2020-2022 Free Software Foundation, Inc.
+   Copyright (C) 2020-2023 Free Software Foundation, Inc.
    Contributed by David Cepelik and Jan Hubicka
 
 This file is part of GCC.
@@ -1875,11 +1875,11 @@ modref_access_analysis::analyze ()
      statement cannot be analyzed (for any reason), the entire function cannot
      be analyzed by modref.  */
   basic_block bb;
+  bitmap always_executed_bbs = find_always_executed_bbs (cfun, true);
   FOR_EACH_BB_FN (bb, cfun)
     {
       gimple_stmt_iterator si;
-      bool always_executed
-	      = bb == single_succ_edge (ENTRY_BLOCK_PTR_FOR_FN (cfun))->dest;
+      bool always_executed = bitmap_bit_p (always_executed_bbs, bb->index);
 
       for (si = gsi_start_nondebug_after_labels_bb (bb);
 	   !gsi_end_p (si); gsi_next_nondebug (&si))
@@ -1926,6 +1926,7 @@ modref_access_analysis::analyze ()
 	  && !finite_function_p ())
 	m_summary_lto->side_effects = true;
     }
+  BITMAP_FREE (always_executed_bbs);
 }
 
 /* Return true if OP accesses memory pointed to by SSA_NAME.  */
@@ -3508,15 +3509,15 @@ class pass_modref : public gimple_opt_pass
 	: gimple_opt_pass (pass_data_modref, ctxt) {}
 
     /* opt_pass methods: */
-    opt_pass *clone ()
+    opt_pass *clone () final override
     {
       return new pass_modref (m_ctxt);
     }
-    virtual bool gate (function *)
+    bool gate (function *) final override
     {
       return flag_ipa_modref;
     }
-    virtual unsigned int execute (function *);
+    unsigned int execute (function *) final override;
 };
 
 /* Encode TT to the output block OB using the summary streaming API.  */
@@ -4170,12 +4171,12 @@ public:
   {}
 
   /* opt_pass methods: */
-  opt_pass *clone () { return new pass_ipa_modref (m_ctxt); }
-  virtual bool gate (function *)
+  opt_pass *clone () final override { return new pass_ipa_modref (m_ctxt); }
+  bool gate (function *) final override
   {
     return true;
   }
-  virtual unsigned int execute (function *);
+  unsigned int execute (function *) final override;
 
 };
 

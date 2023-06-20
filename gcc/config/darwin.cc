@@ -1,5 +1,5 @@
 /* Functions for generic Darwin as target machine for GNU C compiler.
-   Copyright (C) 1989-2022 Free Software Foundation, Inc.
+   Copyright (C) 1989-2023 Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
 This file is part of GCC.
@@ -1415,7 +1415,7 @@ static tree
 is_objc_metadata (tree decl)
 {
   if (DECL_P (decl)
-      && (TREE_CODE (decl) == VAR_DECL || TREE_CODE (decl) == CONST_DECL)
+      && (VAR_P (decl) || TREE_CODE (decl) == CONST_DECL)
       && DECL_ATTRIBUTES (decl))
     {
       tree meta = lookup_attribute ("OBJC2META", DECL_ATTRIBUTES (decl));

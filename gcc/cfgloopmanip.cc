@@ -1,5 +1,5 @@
 /* Loop manipulation code for GNU compiler.
-   Copyright (C) 2002-2022 Free Software Foundation, Inc.
+   Copyright (C) 2002-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -563,8 +563,7 @@ scale_loop_profile (class loop *loop, profile_probability p,
 
 	  /* Probability of exit must be 1/iterations.  */
 	  count_delta = e->count ();
-	  e->probability = profile_probability::always ()
-				    .apply_scale (1, iteration_bound);
+	  e->probability = profile_probability::always () / iteration_bound;
 	  other_e->probability = e->probability.invert ();
 
 	  /* In code below we only handle the following two updates.  */
@@ -586,7 +585,7 @@ scale_loop_profile (class loop *loop, profile_probability p,
 	 we look at the actual profile, if it is available.  */
       p = profile_probability::always ();
 
-      count_in = count_in.apply_scale (iteration_bound, 1);
+      count_in *= iteration_bound;
       p = count_in.probability_in (loop->header->count);
       if (!(p > profile_probability::never ()))
 	p = profile_probability::very_unlikely ();
@@ -827,7 +826,7 @@ create_empty_loop_on_edge (edge entry_edge,
     }
 
   gsi = gsi_last_bb (loop_header);
-  create_iv (initial_value, stride, iv, loop, &gsi, false,
+  create_iv (initial_value, PLUS_EXPR, stride, iv, loop, &gsi, false,
 	     iv_before, iv_after);
 
   /* Insert loop exit condition.  */

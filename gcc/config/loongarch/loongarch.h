@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler.  LoongArch version.
-   Copyright (C) 2021-2022 Free Software Foundation, Inc.
+   Copyright (C) 2021-2023 Free Software Foundation, Inc.
    Contributed by Loongson Ltd.
    Based on MIPS and RISC-V target for GNU compiler.
 
@@ -511,7 +511,7 @@ enum reg_class
 #define REG_CLASS_CONTENTS						\
 {									\
   { 0x00000000, 0x00000000, 0x00000000 },	/* NO_REGS  */		\
-  { 0x001ff000, 0x00000000, 0x00000000 },	/* SIBCALL_REGS  */	\
+  { 0x001fd000, 0x00000000, 0x00000000 },	/* SIBCALL_REGS  */	\
   { 0xff9ffff0, 0x00000000, 0x00000000 },	/* JIRL_REGS  */	\
   { 0xfffffffc, 0x00000000, 0x00000000 },	/* CSR_REGS  */		\
   { 0xffffffff, 0x00000000, 0x00000000 },	/* GR_REGS  */		\
@@ -561,7 +561,8 @@ enum reg_class
   64, 65, 66, 67, 68, 69, 70, 71, 72, 73}
 
 #define IMM_BITS 12
-#define IMM_REACH (1LL << IMM_BITS)
+#define IMM_REACH (HOST_WIDE_INT_1 << IMM_BITS)
+#define HWIT_1U HOST_WIDE_INT_1U
 
 /* True if VALUE is an unsigned 6-bit number.  */
 
@@ -589,18 +590,20 @@ enum reg_class
 /* True if VALUE can be loaded into a register using LU12I.  */
 
 #define LU12I_OPERAND(VALUE) \
-  (((VALUE) | ((1UL << 31) - IMM_REACH)) == ((1UL << 31) - IMM_REACH) \
-   || ((VALUE) | ((1UL << 31) - IMM_REACH)) + IMM_REACH == 0)
+  (((VALUE) | ((HWIT_1U << 31) - IMM_REACH)) == ((HWIT_1U << 31) - IMM_REACH) \
+   || ((VALUE) | ((HWIT_1U << 31) - IMM_REACH)) + IMM_REACH == 0)
 
 /* True if VALUE can be loaded into a register using LU32I.  */
 
 #define LU32I_OPERAND(VALUE) \
-  (((VALUE) | (((1ULL << 19) - 1) << 32)) == (((1ULL << 19) - 1) << 32) \
-   || ((VALUE) | (((1ULL << 19) - 1) << 32)) + (1ULL << 32) == 0)
+  (((VALUE) | (((HWIT_1U << 19) - 1) << 32)) == (((HWIT_1U << 19) - 1) << 32) \
+   || ((VALUE) | (((HWIT_1U << 19) - 1) << 32)) + (HWIT_1U << 32) == 0)
 
 /* True if VALUE can be loaded into a register using LU52I.  */
 
-#define LU52I_OPERAND(VALUE) (((VALUE) | (0xfffULL << 52)) == (0xfffULL << 52))
+#define HWIT_UC_0xFFF HOST_WIDE_INT_UC(0xfff)
+#define LU52I_OPERAND(VALUE) \
+  (((VALUE) | (HWIT_UC_0xFFF << 52)) == (HWIT_UC_0xFFF << 52))
 
 /* Return a value X with the low 12 bits clear, and such that
    VALUE - X is a signed 12-bit value.  */
@@ -609,12 +612,31 @@ enum reg_class
 
 #define CONST_LOW_PART(VALUE) ((VALUE) - CONST_HIGH_PART (VALUE))
 
+/* True if VALUE can be added onto a register with one addu16i.d
+   instruction.  */
+
+#define ADDU16I_OPERAND(VALUE)			\
+  (TARGET_64BIT && (((VALUE) & 0xffff) == 0	\
+   && IMM16_OPERAND ((HOST_WIDE_INT) (VALUE) / 65536)))
+
+/* True if VALUE can be added onto a register with two addi.{d/w}
+   instructions, but not one addi.{d/w} instruction.  */
+#define DUAL_IMM12_OPERAND(VALUE) \
+  (IN_RANGE ((VALUE), -4096, 4094) && !IMM12_OPERAND (VALUE))
+
+/* True if VALUE can be added onto a register with two addu16i.d
+   instruction, but not one addu16i.d instruction.  */
+#define DUAL_ADDU16I_OPERAND(VALUE)		\
+  (TARGET_64BIT && (((VALUE) & 0xffff) == 0	\
+   && !ADDU16I_OPERAND (VALUE)			\
+   && IN_RANGE ((VALUE) / 65536, -0x10000, 0xfffe)))
+
 #define IMM12_INT(X) IMM12_OPERAND (INTVAL (X))
 #define IMM12_INT_UNSIGNED(X) IMM12_OPERAND_UNSIGNED (INTVAL (X))
 #define LU12I_INT(X) LU12I_OPERAND (INTVAL (X))
 #define LU32I_INT(X) LU32I_OPERAND (INTVAL (X))
 #define LU52I_INT(X) LU52I_OPERAND (INTVAL (X))
-#define LARCH_U12BIT_OFFSET_P(OFFSET) (IN_RANGE (OFFSET, -2048, 2047))
+#define LARCH_12BIT_OFFSET_P(OFFSET) (IN_RANGE (OFFSET, -2048, 2047))
 #define LARCH_9BIT_OFFSET_P(OFFSET) (IN_RANGE (OFFSET, -256, 255))
 #define LARCH_16BIT_OFFSET_P(OFFSET) (IN_RANGE (OFFSET, -32768, 32767))
 #define LARCH_SHIFT_2_OFFSET_P(OFFSET) (((OFFSET) & 0x3) == 0)
@@ -665,11 +687,15 @@ enum reg_class
 
 #define STACK_BOUNDARY (TARGET_ABI_LP64 ? 128 : 64)
 
+/* This value controls how many pages we manually unroll the loop for when
+   generating stack clash probes.  */
+#define STACK_CLASH_MAX_UNROLL_PAGES 4
+
 /* Symbolic macros for the registers used to return integer and floating
    point values.  */
 
 #define GP_RETURN (GP_REG_FIRST + 4)
-#define FP_RETURN ((TARGET_SOFT_FLOAT) ? GP_RETURN : (FP_REG_FIRST + 0))
+#define FP_RETURN ((TARGET_SOFT_FLOAT_ABI) ? GP_RETURN : (FP_REG_FIRST + 0))
 
 #define MAX_ARGS_IN_REGISTERS 8
 
@@ -829,7 +855,6 @@ typedef struct {
    1 is the default; other values are interpreted relative to that.  */
 
 #define BRANCH_COST(speed_p, predictable_p) loongarch_branch_cost
-#define LOGICAL_OP_NON_SHORT_CIRCUIT 0
 
 /* Return the asm template for a conditional branch instruction.
    OPCODE is the opcode's mnemonic and OPERANDS is the asm template for
@@ -1037,21 +1062,21 @@ typedef struct {
 
 /* The maximum number of bytes that can be copied by one iteration of
    a cpymemsi loop; see loongarch_block_move_loop.  */
-#define LARCH_MAX_MOVE_BYTES_PER_LOOP_ITER (UNITS_PER_WORD * 4)
+#define LARCH_MAX_MOVE_OPS_PER_LOOP_ITER 4
 
 /* The maximum number of bytes that can be copied by a straight-line
    implementation of cpymemsi; see loongarch_block_move_straight.  We want
    to make sure that any loop-based implementation will iterate at
    least twice.  */
-#define LARCH_MAX_MOVE_BYTES_STRAIGHT (LARCH_MAX_MOVE_BYTES_PER_LOOP_ITER * 2)
+#define LARCH_MAX_MOVE_OPS_STRAIGHT (LARCH_MAX_MOVE_OPS_PER_LOOP_ITER * 2)
 
 /* The base cost of a memcpy call, for MOVE_RATIO and friends.  These
    values were determined experimentally by benchmarking with CSiBE.
 */
-#define LARCH_CALL_RATIO 8
+#define LARCH_CALL_RATIO 6
 
 /* Any loop-based implementation of cpymemsi will have at least
-   LARCH_MAX_MOVE_BYTES_STRAIGHT / UNITS_PER_WORD memory-to-memory
+   LARCH_MAX_MOVE_OPS_PER_LOOP_ITER memory-to-memory
    moves, so allow individual copies of fewer elements.
 
    When cpymemsi is not available, use a value approximating
@@ -1062,9 +1087,7 @@ typedef struct {
    value of LARCH_CALL_RATIO to take that into account.  */
 
 #define MOVE_RATIO(speed) \
-  (HAVE_cpymemsi \
-   ? LARCH_MAX_MOVE_BYTES_PER_LOOP_ITER / UNITS_PER_WORD \
-   : CLEAR_RATIO (speed) / 2)
+  (HAVE_cpymemsi ? LARCH_MAX_MOVE_OPS_PER_LOOP_ITER : CLEAR_RATIO (speed) / 2)
 
 /* For CLEAR_RATIO, when optimizing for size, give a better estimate
    of the length of a memset call, but use the default otherwise.  */
@@ -1124,11 +1147,18 @@ struct GTY (()) machine_function
   /* The current frame information, calculated by loongarch_compute_frame_info.
    */
   struct loongarch_frame_info frame;
+
+  bool reg_is_wrapped_separately[FIRST_PSEUDO_REGISTER];
 };
 #endif
 
+#ifdef HAVE_AS_EH_FRAME_PCREL_ENCODING_SUPPORT
+#define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL) \
+  (((GLOBAL) ? DW_EH_PE_indirect : 0) | DW_EH_PE_pcrel | DW_EH_PE_sdata4)
+#else
 #define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL) \
   (((GLOBAL) ? DW_EH_PE_indirect : 0) | DW_EH_PE_absptr)
+#endif
 
 /* Do emit .note.GNU-stack by default.  */
 #ifndef NEED_INDICATE_EXEC_STACK
@@ -1142,6 +1172,6 @@ struct GTY (()) machine_function
 /* The largest type that can be passed in floating-point registers.  */
 /* TODO: according to mabi.  */
 #define UNITS_PER_FP_ARG  \
-  (TARGET_HARD_FLOAT ? (TARGET_DOUBLE_FLOAT ? 8 : 4) : 0)
+  (TARGET_HARD_FLOAT_ABI ? (TARGET_DOUBLE_FLOAT_ABI ? 8 : 4) : 0)
 
 #define FUNCTION_VALUE_REGNO_P(N) ((N) == GP_RETURN || (N) == FP_RETURN)

@@ -1,5 +1,5 @@
 // Access-related classes for RTL SSA                               -*- C++ -*-
-// Copyright (C) 2020-2022 Free Software Foundation, Inc.
+// Copyright (C) 2020-2023 Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -215,7 +215,8 @@ private:
 
   // The values returned by the accessors above.
   unsigned int m_regno;
-  access_kind m_kind : 8;
+  machine_mode m_mode : MACHINE_MODE_BITSIZE;
+  access_kind m_kind : 2;
 
 protected:
   // The value returned by the accessors above.
@@ -249,12 +250,6 @@ private:
   // Indicates that this access has been allocated on the function_info's
   // temporary obstack and so is not (yet) part of the proper SSA form.
   unsigned int m_is_temp : 1;
-
-  // Bits for future expansion.
-  unsigned int m_spare : 2;
-
-  // The value returned by the accessor above.
-  machine_mode m_mode : 8;
 };
 
 // A contiguous array of access_info pointers.  Used to represent a

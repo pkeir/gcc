@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2022 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * https://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -41,13 +41,6 @@ enum class Baseok : uint8_t
     semanticdone  // all base classes semantic done
 };
 
-enum class ThreeState : uint8_t
-{
-    none,         // value not yet computed
-    no,           // value is false
-    yes,          // value is true
-};
-
 FuncDeclaration *search_toString(StructDeclaration *sd);
 
 enum class ClassKind : uint8_t
@@ -82,7 +75,7 @@ public:
     CPPMANGLE cppmangle;
 
     // overridden symbol with pragma(mangle, "...")
-    MangleOverride *mangleOverride;
+    MangleOverride *pMangleOverride;
     /* !=NULL if is nested
      * pointing to the dsymbol that directly enclosing it.
      * 1. The function that enclosing it (nested struct and class)
@@ -125,7 +118,7 @@ public:
     bool determineSize(const Loc &loc);
     virtual void finalizeSize() = 0;
     uinteger_t size(const Loc &loc) override final;
-    bool fill(const Loc &loc, Expressions *elements, bool ctorinit);
+    bool fill(const Loc &loc, Expressions &elements, bool ctorinit);
     Type *getType() override final;
     bool isDeprecated() const override final; // is aggregate deprecated?
     void setDeprecated();
@@ -159,17 +152,6 @@ struct StructFlags
 class StructDeclaration : public AggregateDeclaration
 {
 public:
-    bool zeroInit;              // !=0 if initialize with 0 fill
-    bool hasIdentityAssign;     // true if has identity opAssign
-    bool hasBlitAssign;         // true if opAssign is a blit
-    bool hasIdentityEquals;     // true if has identity opEquals
-    bool hasNoFields;           // has no fields
-    bool hasCopyCtor;           // copy constructor
-    // Even if struct is defined as non-root symbol, some built-in operations
-    // (e.g. TypeidExp, NewExp, ArrayLiteralExp, etc) request its TypeInfo.
-    // For those, today TypeInfo_Struct is generated in COMDAT.
-    bool requestTypeInfo;
-
     FuncDeclarations postblits; // Array of postblit functions
     FuncDeclaration *postblit;  // aggregate postblit
 
@@ -179,18 +161,37 @@ public:
     static FuncDeclaration *xerreq;      // object.xopEquals
     static FuncDeclaration *xerrcmp;     // object.xopCmp
 
-    structalign_t alignment;    // alignment applied outside of the struct
-    ThreeState ispod;           // if struct is POD
-
     // ABI-specific type(s) if the struct can be passed in registers
     TypeTuple *argTypes;
 
+    structalign_t alignment;    // alignment applied outside of the struct
+    ThreeState ispod;           // if struct is POD
+private:
+    uint16_t bitFields;
+public:
     static StructDeclaration *create(const Loc &loc, Identifier *id, bool inObject);
     StructDeclaration *syntaxCopy(Dsymbol *s) override;
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = SearchLocalsOnly) override final;
     const char *kind() const override;
     void finalizeSize() override final;
     bool isPOD();
+    bool zeroInit() const;          // !=0 if initialize with 0 fill
+    bool zeroInit(bool v);
+    bool hasIdentityAssign() const; // true if has identity opAssign
+    bool hasIdentityAssign(bool v);
+    bool hasBlitAssign() const;     // true if opAssign is a blit
+    bool hasBlitAssign(bool v);
+    bool hasIdentityEquals() const; // true if has identity opEquals
+    bool hasIdentityEquals(bool v);
+    bool hasNoFields() const;       // has no fields
+    bool hasNoFields(bool v);
+    bool hasCopyCtor() const;       // copy constructor
+    bool hasCopyCtor(bool v);
+    // Even if struct is defined as non-root symbol, some built-in operations
+    // (e.g. TypeidExp, NewExp, ArrayLiteralExp, etc) request its TypeInfo.
+    // For those, today TypeInfo_Struct is generated in COMDAT.
+    bool requestTypeInfo() const;
+    bool requestTypeInfo(bool v);
 
     StructDeclaration *isStructDeclaration() override final { return this; }
     void accept(Visitor *v) override { v->visit(this); }
@@ -303,7 +304,6 @@ public:
     virtual int vtblOffset() const;
     const char *kind() const override;
 
-    void addLocalClass(ClassDeclarations *) override final;
     void addObjcSymbols(ClassDeclarations *classes, ClassDeclarations *categories) override final;
 
     // Back end

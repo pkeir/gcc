@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -1904,10 +1904,8 @@ package body Osint is
             if Dir_Name'Length = 0 then
                Found := N;
             else
-               Name_Len := Full_Name'Length - 1;
-               Name_Buffer (1 .. Name_Len) :=
-                 Full_Name (1 .. Full_Name'Last - 1);
-               Found := Name_Find;
+               Found :=
+                 Name_Find (Full_Name (Full_Name'First .. Full_Name'Last - 1));
             end if;
          end if;
       end;

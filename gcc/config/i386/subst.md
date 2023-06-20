@@ -1,5 +1,5 @@
 ;; GCC machine description for AVX512F instructions
-;; Copyright (C) 2013-2022 Free Software Foundation, Inc.
+;; Copyright (C) 2013-2023 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -25,6 +25,7 @@
    V16SI V8SI  V4SI
    V8DI  V4DI  V2DI
    V32HF V16HF V8HF
+   V32BF V16BF V8BF
    V16SF V8SF  V4SF
    V8DF  V4DF  V2DF])
 

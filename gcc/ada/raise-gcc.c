@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *             Copyright (C) 1992-2022, Free Software Foundation, Inc.      *
+ *             Copyright (C) 1992-2023, Free Software Foundation, Inc.      *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -1377,6 +1377,10 @@ __gnat_cleanupunwind_handler (int version ATTRIBUTE_UNUSED,
 _Unwind_Reason_Code
 __gnat_Unwind_RaiseException (_Unwind_Exception *e)
 {
+#ifdef NO_EXCEPTION_PROPAGATION
+  abort();
+#endif
+
 #ifdef __USING_SJLJ_EXCEPTIONS__
   return _Unwind_SjLj_RaiseException (e);
 #else

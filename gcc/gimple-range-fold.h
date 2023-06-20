@@ -1,5 +1,5 @@
 /* Header file for the GIMPLE fold_using_range interface.
-   Copyright (C) 2019-2022 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod <amacleod@redhat.com>
    and Aldy Hernandez <aldyh@redhat.com>.
 
@@ -37,14 +37,19 @@ bool fold_range (vrange &v, gimple *s, edge on_edge, range_query *q = NULL);
 
 // These routines the operands to be specified when manually folding.
 // Any excess queries will be drawn from the current range_query.
-bool fold_range (vrange &r, gimple *s, vrange &r1);
-bool fold_range (vrange &r, gimple *s, vrange &r1, vrange &r2);
-bool fold_range (vrange &r, gimple *s, unsigned num_elements, vrange **vector);
+bool fold_range (vrange &r, gimple *s, vrange &r1, range_query *q = NULL);
+bool fold_range (vrange &r, gimple *s, vrange &r1, vrange &r2,
+		 range_query *q = NULL);
+bool fold_range (vrange &r, gimple *s, unsigned num_elements, vrange **vector,
+		 range_query *q = NULL);
+
+// This routine will return a relation trio for stmt S.
+relation_trio fold_relations (gimple *s, range_query *q = NULL);
 
 // Return the type of range which statement S calculates.  If the type is
 // unsupported or no type can be determined, return NULL_TREE.
 
-static inline tree
+inline tree
 gimple_range_type (const gimple *s)
 {
   tree lhs = gimple_get_lhs (s);
@@ -66,27 +71,27 @@ gimple_range_type (const gimple *s)
 	    type = TREE_TYPE (type);
 	}
     }
-  if (type && vrange::supports_type_p (type))
+  if (type && Value_Range::supports_type_p (type))
     return type;
   return NULL_TREE;
 }
 
 // Return EXP if it is an SSA_NAME with a type supported by gimple ranges.
 
-static inline tree
+inline tree
 gimple_range_ssa_p (tree exp)
 {
   if (exp && TREE_CODE (exp) == SSA_NAME &&
       !SSA_NAME_IS_VIRTUAL_OPERAND (exp) &&
       !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (exp) &&
-      vrange::supports_type_p (TREE_TYPE (exp)))
+      Value_Range::supports_type_p (TREE_TYPE (exp)))
     return exp;
   return NULL_TREE;
 }
 
 // Return true if TYPE1 and TYPE2 are compatible range types.
 
-static inline bool
+inline bool
 range_compatible_p (tree type1, tree type2)
 {
   // types_compatible_p requires conversion in both directions to be useless.
@@ -95,7 +100,6 @@ range_compatible_p (tree type1, tree type2)
   return (TYPE_PRECISION (type1) == TYPE_PRECISION (type2)
 	  && TYPE_SIGN (type1) == TYPE_SIGN (type2));
 }
-
 
 // Source of all operands for fold_using_range and gori_compute.
 // It abstracts out the source of an operand so it can come from a stmt or
@@ -150,10 +154,7 @@ protected:
   relation_oracle *m_oracle;
 };
 
-extern tree gimple_range_operand1 (const gimple *s);
-extern tree gimple_range_operand2 (const gimple *s);
-
-// This class uses ranges to fold a gimple statement producinf a range for
+// This class uses ranges to fold a gimple statement producing a range for
 // the LHS.  The source of all operands is supplied via the fur_source class
 // which provides a range_query as well as a source location and any other
 // required information.
@@ -164,16 +165,13 @@ public:
   bool fold_stmt (vrange &r, gimple *s, class fur_source &src,
 		  tree name = NULL_TREE);
 protected:
-  bool range_of_range_op (vrange &r, gimple *s, fur_source &src);
+  bool range_of_range_op (vrange &r, gimple_range_op_handler &handler,
+			  fur_source &src);
   bool range_of_call (vrange &r, gcall *call, fur_source &src);
   bool range_of_cond_expr (vrange &r, gassign* cond, fur_source &src);
   bool range_of_address (irange &r, gimple *s, fur_source &src);
-  bool range_of_builtin_call (vrange &r, gcall *call, fur_source &src);
-  bool range_of_builtin_int_call (irange &r, gcall *call, fur_source &src);
-  void range_of_builtin_ubsan_call (irange &r, gcall *call, tree_code code,
-				    fur_source &src);
   bool range_of_phi (vrange &r, gphi *phi, fur_source &src);
-  void range_of_ssa_name_with_loop_info (irange &, tree, class loop *, gphi *,
+  void range_of_ssa_name_with_loop_info (vrange &, tree, class loop *, gphi *,
 					 fur_source &src);
   void relation_fold_and_or (irange& lhs_range, gimple *s, fur_source &src);
 };

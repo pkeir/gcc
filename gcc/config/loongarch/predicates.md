@@ -1,5 +1,5 @@
 ;; Predicate definitions for LoongArch target.
-;; Copyright (C) 2021-2022 Free Software Foundation, Inc.
+;; Copyright (C) 2021-2023 Free Software Foundation, Inc.
 ;; Contributed by Loongson Ltd.
 ;; Based on MIPS target for GNU compiler.
 ;;
@@ -39,13 +39,49 @@
   (and (match_code "const_int")
        (match_test "IMM12_OPERAND (INTVAL (op))")))
 
+(define_predicate "const_dual_imm12_operand"
+  (and (match_code "const_int")
+       (match_test "DUAL_IMM12_OPERAND (INTVAL (op))")))
+
 (define_predicate "const_imm16_operand"
   (and (match_code "const_int")
        (match_test "IMM16_OPERAND (INTVAL (op))")))
 
+(define_predicate "const_addu16i_operand"
+  (and (match_code "const_int")
+       (match_test "ADDU16I_OPERAND (INTVAL (op))")))
+
+(define_predicate "const_addu16i_imm12_di_operand"
+  (and (match_code "const_int")
+       (match_test "loongarch_addu16i_imm12_operand_p (INTVAL (op), DImode)")))
+
+(define_predicate "const_addu16i_imm12_si_operand"
+  (and (match_code "const_int")
+       (match_test "loongarch_addu16i_imm12_operand_p (INTVAL (op), SImode)")))
+
+(define_predicate "const_dual_addu16i_operand"
+  (and (match_code "const_int")
+       (match_test "DUAL_ADDU16I_OPERAND (INTVAL (op))")))
+
 (define_predicate "arith_operand"
   (ior (match_operand 0 "const_arith_operand")
        (match_operand 0 "register_operand")))
+
+(define_predicate "plus_di_operand"
+  (ior (match_operand 0 "arith_operand")
+       (match_operand 0 "const_dual_imm12_operand")
+       (match_operand 0 "const_addu16i_operand")
+       (match_operand 0 "const_addu16i_imm12_di_operand")
+       (match_operand 0 "const_dual_addu16i_operand")))
+
+(define_predicate "plus_si_extend_operand"
+  (ior (match_operand 0 "arith_operand")
+       (match_operand 0 "const_dual_imm12_operand")
+       (match_operand 0 "const_addu16i_imm12_si_operand")))
+
+(define_predicate "plus_si_operand"
+  (ior (match_operand 0 "plus_si_extend_operand")
+       (match_operand 0 "const_addu16i_operand")))
 
 (define_predicate "const_immalsl_operand"
   (and (match_code "const_int")
@@ -91,14 +127,6 @@
   (ior (match_operand 0 "const_1_operand")
        (match_operand 0 "register_operand")))
 
-(define_predicate "const_0_to_3_operand"
-  (and (match_code "const_int")
-       (match_test "IN_RANGE (INTVAL (op), 0, 3)")))
-
-(define_predicate "const_0_to_7_operand"
-  (and (match_code "const_int")
-       (match_test "IN_RANGE (INTVAL (op), 0, 7)")))
-
 (define_predicate "lu52i_mask_operand"
   (and (match_code "const_int")
        (match_test "UINTVAL (op) == 0xfffffffffffff")))
@@ -110,20 +138,43 @@
 (define_predicate "const_call_insn_operand"
   (match_code "const,symbol_ref,label_ref")
 {
-  enum loongarch_symbol_type symbol_type;
+  /* Split symbol to high and low if return false.
+     If defined TARGET_CMODEL_EXTREME, all symbol would be splited,
+     else if offset is not zero, the symbol would be splited.  */
 
-  if (!loongarch_symbolic_constant_p (op, &symbol_type))
+  enum loongarch_symbol_type symbol_type;
+  loongarch_symbolic_constant_p (op, &symbol_type);
+
+  rtx offset, x = op;
+  split_const (x, &x, &offset);
+
+  if (offset != const0_rtx)
     return false;
+
+  /* When compiling with '-mcmodel=medium -mexplicit-relocs'
+     symbols are splited in loongarch_legitimize_call_address.
+
+     When compiling with '-mcmodel=medium -mno-explicit-relocs',
+     first obtain the symbolic address or the address of the
+     plt entry, and then perform an indirect jump, so return false.  */
 
   switch (symbol_type)
     {
+    case SYMBOL_PCREL:
+      if (TARGET_CMODEL_EXTREME
+	  || (TARGET_CMODEL_MEDIUM && !TARGET_EXPLICIT_RELOCS))
+	return false;
+      else
+	return 1;
+
     case SYMBOL_GOT_DISP:
-      /* Without explicit relocs, there is no special syntax for
-	 loading the address of a call destination into a register.
-	 Using "la.global JIRL_REGS,foo; jirl JIRL_REGS" would prevent the lazy
-	 binding of "foo", so keep the address of global symbols with the jirl
-	 macro.  */
-      return 1;
+      if (TARGET_CMODEL_EXTREME
+	  || !flag_plt
+	  || (flag_plt && TARGET_CMODEL_MEDIUM
+	      && !TARGET_EXPLICIT_RELOCS))
+	return false;
+      else
+	return 1;
 
     default:
       return false;
@@ -140,22 +191,11 @@
 	    (match_test "loongarch_symbol_binds_local_p (op) != 0"))
        (match_test "CONSTANT_P (op)")))
 
-(define_predicate "is_const_call_weak_symbol"
+(define_predicate "is_const_call_no_local_symbol"
   (and (match_operand 0 "const_call_insn_operand")
-       (not (match_operand 0 "is_const_call_local_symbol"))
-       (match_test "loongarch_weak_symbol_p (op) != 0")
-       (match_test "CONSTANT_P (op)")))
-
-(define_predicate "is_const_call_plt_symbol"
-  (and (match_operand 0 "const_call_insn_operand")
-       (match_test "flag_plt != 0")
-       (match_test "loongarch_global_symbol_noweak_p (op) != 0")
-       (match_test "CONSTANT_P (op)")))
-
-(define_predicate "is_const_call_global_noplt_symbol"
-  (and (match_operand 0 "const_call_insn_operand")
-       (match_test "flag_plt == 0")
-       (match_test "loongarch_global_symbol_noweak_p (op) != 0")
+       (ior (match_test "loongarch_global_symbol_p (op) != 0")
+	    (match_test "loongarch_symbol_binds_local_p (op) == 0")
+       (match_test "loongarch_weak_symbol_p (op) != 0"))
        (match_test "CONSTANT_P (op)")))
 
 ;; A legitimate CONST_INT operand that takes more than one instruction
@@ -214,12 +254,24 @@
   switch (GET_CODE (op))
     {
     case CONST_INT:
-      return !splittable_const_int_operand (op, mode);
+      return true;
 
     case CONST:
     case SYMBOL_REF:
     case LABEL_REF:
-      return (loongarch_symbolic_constant_p (op, &symbol_type));
+      return (loongarch_symbolic_constant_p (op, &symbol_type)
+	      && (!TARGET_EXPLICIT_RELOCS
+		  || !loongarch_split_symbol_type (symbol_type)));
+
+    case HIGH:
+      /* '-mno-explicit-relocs' don't generate high/low pairs.  */
+      if (!TARGET_EXPLICIT_RELOCS)
+	return false;
+
+      op = XEXP (op, 0);
+      return (loongarch_symbolic_constant_p (op, &symbol_type)
+	      && loongarch_split_symbol_type (symbol_type));
+
     default:
       return true;
     }

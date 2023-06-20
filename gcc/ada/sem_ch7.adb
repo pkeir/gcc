@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -72,6 +72,7 @@ with Sinfo.Utils;    use Sinfo.Utils;
 with Sinput;         use Sinput;
 with Style;
 with Uintp;          use Uintp;
+with Warnsw;         use Warnsw;
 
 with GNAT.HTable;
 
@@ -304,6 +305,49 @@ package body Sem_Ch7 is
             Decl_Id     : Entity_Id;
             In_Instance : Boolean;
             Spec        : Node_Id;
+            Ignore      : Boolean;
+
+            function Set_Referencer_Of_Non_Subprograms return Boolean;
+            --  Set Has_Referencer_Of_Non_Subprograms and call
+            --  Scan_Subprogram_Refs if relevant.
+            --  Return whether Scan_Subprogram_Refs was called.
+
+            ---------------------------------------
+            -- Set_Referencer_Of_Non_Subprograms --
+            ---------------------------------------
+
+            function Set_Referencer_Of_Non_Subprograms return Boolean is
+            begin
+               --  An inlined subprogram body acts as a referencer
+               --  unless we generate C code without -gnatn where we want
+               --  to favor generating static inline functions as much as
+               --  possible.
+
+               --  Note that we test Has_Pragma_Inline here in addition
+               --  to Is_Inlined. We are doing this for a client, since
+               --  we are computing which entities should be public, and
+               --  it is the client who will decide if actual inlining
+               --  should occur, so we need to catch all cases where the
+               --  subprogram may be inlined by the client.
+
+               if (not CCG_Mode
+                     or else Has_Pragma_Inline_Always (Decl_Id)
+                     or else Inline_Active)
+                 and then (Is_Inlined (Decl_Id)
+                            or else Has_Pragma_Inline (Decl_Id))
+               then
+                  Has_Referencer_Of_Non_Subprograms := True;
+
+                  --  Inspect the statements of the subprogram body
+                  --  to determine whether the body references other
+                  --  subprograms.
+
+                  Scan_Subprogram_Refs (Decl);
+                  return True;
+               else
+                  return False;
+               end if;
+            end Set_Referencer_Of_Non_Subprograms;
 
          begin
             if No (Decls) then
@@ -398,54 +442,21 @@ package body Sem_Ch7 is
                         return True;
                      end if;
 
-                     --  An inlined subprogram body acts as a referencer
-                     --  unless we generate C code since inlining is then
-                     --  handled by the C compiler.
-
-                     --  Note that we test Has_Pragma_Inline here in addition
-                     --  to Is_Inlined. We are doing this for a client, since
-                     --  we are computing which entities should be public, and
-                     --  it is the client who will decide if actual inlining
-                     --  should occur, so we need to catch all cases where the
-                     --  subprogram may be inlined by the client.
-
-                     if not CCG_Mode
-                       and then (Is_Inlined (Decl_Id)
-                                  or else Has_Pragma_Inline (Decl_Id))
-                     then
-                        Has_Referencer_Of_Non_Subprograms := True;
-
-                        --  Inspect the statements of the subprogram body
-                        --  to determine whether the body references other
-                        --  subprograms.
-
-                        Scan_Subprogram_Refs (Decl);
-                     end if;
+                     Ignore := Set_Referencer_Of_Non_Subprograms;
 
                   --  Otherwise this is a stand alone subprogram body
 
                   else
                      Decl_Id := Defining_Entity (Decl);
 
-                     --  An inlined subprogram body acts as a referencer
-                     --  unless we generate C code since inlining is then
-                     --  handled by the C compiler.
+                     --  See the N_Subprogram_Declaration case below
 
-                     if not CCG_Mode
-                       and then (Is_Inlined (Decl_Id)
-                                  or else Has_Pragma_Inline (Decl_Id))
+                     if not Set_Referencer_Of_Non_Subprograms
+                       and then (not In_Nested_Instance
+                                  or else not Subprogram_Table.Get_First)
+                       and then not Subprogram_Table.Get (Decl_Id)
                      then
-                        Has_Referencer_Of_Non_Subprograms := True;
-
-                        --  Inspect the statements of the subprogram body
-                        --  to determine whether the body references other
-                        --  subprograms.
-
-                        Scan_Subprogram_Refs (Decl);
-
-                     --  Otherwise we can reset Is_Public right away
-
-                     elsif not Subprogram_Table.Get (Decl_Id) then
+                        --  We can reset Is_Public right away
                         Set_Is_Public (Decl_Id, False);
                      end if;
                   end if;
@@ -889,6 +900,9 @@ package body Sem_Ch7 is
       --  current node otherwise. Note that N was rewritten above, so we must
       --  be sure to get the latest Body_Id value.
 
+      if Ekind (Body_Id) = E_Package then
+         Reinit_Field_To_Zero (Body_Id, F_Body_Needed_For_Inlining);
+      end if;
       Mutate_Ekind (Body_Id, E_Package_Body);
       Set_Body_Entity (Spec_Id, Body_Id);
       Set_Spec_Entity (Body_Id, Spec_Id);
@@ -1176,6 +1190,8 @@ package body Sem_Ch7 is
       Generate_Definition (Id);
       Enter_Name (Id);
       Mutate_Ekind  (Id, E_Package);
+      Set_Is_Not_Self_Hidden (Id);
+      --  Needed early because of Set_Categorization_From_Pragmas below
       Set_Etype  (Id, Standard_Void_Type);
 
       --  Set SPARK_Mode from context
@@ -1239,17 +1255,24 @@ package body Sem_Ch7 is
          Check_Completion;
 
          --  If the package spec does not require an explicit body, then all
-         --  abstract states declared in nested packages cannot possibly get
-         --  a proper refinement (SPARK RM 7.2.2(3)). This check is performed
-         --  only when the compilation unit is the main unit to allow for
-         --  modular SPARK analysis where packages do not necessarily have
-         --  bodies.
+         --  abstract states declared in nested packages cannot possibly get a
+         --  proper refinement (SPARK RM 7.1.4(4) and SPARK RM 7.2.2(3)). This
+         --  check is performed only when the compilation unit is the main
+         --  unit to allow for modular SPARK analysis where packages do not
+         --  necessarily have bodies.
 
          if Is_Comp_Unit then
             Check_State_Refinements
               (Context      => N,
                Is_Main_Unit => Parent (N) = Cunit (Main_Unit));
          end if;
+
+         --  Warn about references to unset objects, which is straightforward
+         --  for packages with no bodies. For packages with bodies this is more
+         --  complicated, because some of the objects might be set between spec
+         --  and body elaboration, in nested or child packages, etc.
+
+         Check_References (Id);
       end if;
 
       --  Set Body_Required indication on the compilation unit node
@@ -1307,11 +1330,10 @@ package body Sem_Ch7 is
       --  private_with_clauses, and remove them at the end of the nested
       --  package.
 
-      procedure Clear_Constants (Id : Entity_Id; FE : Entity_Id);
-      --  Clears constant indications (Never_Set_In_Source, Constant_Value, and
-      --  Is_True_Constant) on all variables that are entities of Id, and on
-      --  the chain whose first element is FE. A recursive call is made for all
-      --  packages and generic packages.
+      procedure Clear_Constants (Id : Entity_Id);
+      --  Clears constant indications (Never_Set_In_Source, Constant_Value,
+      --  and Is_True_Constant) on all variables that are entities of Id.
+      --  A recursive call is made for all packages and generic packages.
 
       procedure Generate_Parent_References;
       --  For a child unit, generate references to parent units, for
@@ -1342,7 +1364,7 @@ package body Sem_Ch7 is
       -- Clear_Constants --
       ---------------------
 
-      procedure Clear_Constants (Id : Entity_Id; FE : Entity_Id) is
+      procedure Clear_Constants (Id : Entity_Id) is
          E : Entity_Id;
 
       begin
@@ -1358,9 +1380,9 @@ package body Sem_Ch7 is
          --  package can contain a renaming declaration to itself, and such
          --  renamings are generated automatically within package instances.
 
-         E := FE;
+         E := First_Entity (Id);
          while Present (E) and then E /= Id loop
-            if Is_Assignable (E) then
+            if Ekind (E) = E_Variable then
                Set_Never_Set_In_Source (E, False);
                Set_Is_True_Constant    (E, False);
                Set_Current_Value       (E, Empty);
@@ -1372,8 +1394,7 @@ package body Sem_Ch7 is
                end if;
 
             elsif Is_Package_Or_Generic_Package (E) then
-               Clear_Constants (E, First_Entity (E));
-               Clear_Constants (E, First_Private_Entity (E));
+               Clear_Constants (E);
             end if;
 
             Next_Entity (E);
@@ -1918,6 +1939,20 @@ package body Sem_Ch7 is
             end;
          end if;
 
+         --  Preanalyze class-wide conditions of dispatching primitives defined
+         --  in nested packages. For library packages, class-wide pre- and
+         --  postconditions are preanalyzed when the primitives are frozen
+         --  (see Merge_Class_Conditions); for nested packages, the end of the
+         --  package does not cause freezing (and hence they must be analyzed
+         --  now to ensure the correct visibility of referenced entities).
+
+         if not Is_Compilation_Unit (Id)
+           and then Is_Dispatching_Operation (E)
+           and then Present (Contract (E))
+         then
+            Preanalyze_Class_Conditions (E);
+         end if;
+
          Next_Entity (E);
       end loop;
 
@@ -1999,8 +2034,7 @@ package body Sem_Ch7 is
       if Is_Library_Level_Entity (Id)
         or else Is_Generic_Instance (Id)
       then
-         Clear_Constants (Id, First_Entity (Id));
-         Clear_Constants (Id, First_Private_Entity (Id));
+         Clear_Constants (Id);
       end if;
 
       --  Output relevant information as to why the package requires a body.
@@ -2712,10 +2746,11 @@ package body Sem_Ch7 is
          Mutate_Ekind (Id, E_Private_Type);
       end if;
 
-      Set_Etype              (Id, Id);
+      Set_Is_Not_Self_Hidden (Id);
+      Set_Etype (Id, Id);
       Set_Has_Delayed_Freeze (Id);
-      Set_Is_First_Subtype   (Id);
-      Reinit_Size_Align      (Id);
+      Set_Is_First_Subtype (Id);
+      Reinit_Size_Align (Id);
 
       Set_Is_Constrained (Id,
         No (Discriminant_Specifications (N))
@@ -3179,10 +3214,6 @@ package body Sem_Ch7 is
             --  is simply that the initializing expression is missing.
 
             if not Has_Private_Declaration (Etype (Id)) then
-
-               --  We assume that the user did not intend a deferred constant
-               --  declaration, and the expression is just missing.
-
                Error_Msg_N
                  ("constant declaration requires initialization expression",
                    Parent (Id));

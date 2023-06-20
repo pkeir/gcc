@@ -1,5 +1,5 @@
 # Process this file with autoreconf to produce a configure script.
-#  Copyright (C) 2012-2022 Free Software Foundation, Inc.
+#  Copyright (C) 2012-2023 Free Software Foundation, Inc.
 #
 #  This file is part of the GNU Atomic Library (libatomic).
 #
@@ -146,7 +146,6 @@ save_CFLAGS="$CFLAGS"
 AC_CHECK_TOOL(AR, ar)
 AC_CHECK_TOOL(NM, nm)
 AC_CHECK_TOOL(RANLIB, ranlib, ranlib-not-found-in-path-error)
-AC_PATH_PROG(PERL, perl, perl-not-found-in-path-error)
 AC_PROG_INSTALL
 
 # Configure libtool

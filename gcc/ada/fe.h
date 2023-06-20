@@ -6,7 +6,7 @@
  *                                                                          *
  *                              C Header File                               *
  *                                                                          *
- *          Copyright (C) 1992-2022, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2023, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -182,13 +182,17 @@ extern Boolean Is_Init_Proc		(Entity_Id);
 
 /* exp_util: */
 
+#define Find_Interface_Tag		exp_util__find_interface_tag
 #define Is_Fully_Repped_Tagged_Type	exp_util__is_fully_repped_tagged_type
 #define Is_Related_To_Func_Return	exp_util__is_related_to_func_return
-#define Find_Interface_Tag		exp_util__find_interface_tag
+#define Is_Secondary_Stack_Thunk	exp_util__is_secondary_stack_thunk
+#define Thunk_Target			exp_util__thunk_target
 
+extern Entity_Id Find_Interface_Tag		(Entity_Id, Entity_Id);
 extern Boolean Is_Fully_Repped_Tagged_Type	(Entity_Id);
 extern Boolean Is_Related_To_Func_Return	(Entity_Id);
-extern Entity_Id Find_Interface_Tag		(Entity_Id, Entity_Id);
+extern Boolean Is_Secondary_Stack_Thunk		(Entity_Id);
+extern Entity_Id Thunk_Target 			(Entity_Id);
 
 /* lib: */
 
@@ -213,10 +217,14 @@ extern Boolean In_Extended_Main_Code_Unit	(Entity_Id);
 #define List_Representation_Info	opt__list_representation_info
 #define No_Strict_Aliasing_CP		opt__no_strict_aliasing
 #define Suppress_Checks			opt__suppress_checks
+#define Unnest_Subprogram_Mode		opt__unnest_subprogram_mode
 
 typedef enum {
-  Ada_83, Ada_95, Ada_2005, Ada_2012, Ada_2022, Ada_With_Extensions
+  Ada_83, Ada_95, Ada_2005, Ada_2012, Ada_2022
 } Ada_Version_Type;
+// Ada_With_Core_Extensions and Ada_With_All_Extensions (see opt.ads) are not
+// used on the C side for now. If we decide to use them, we should import
+// All_Extensions_Allowed and Core_Extensions_Allowed functions.
 
 extern Ada_Version_Type Ada_Version;
 extern Boolean Back_End_Inlining;
@@ -229,6 +237,7 @@ extern Boolean GNAT_Mode;
 extern Int List_Representation_Info;
 extern Boolean No_Strict_Aliasing_CP;
 extern Boolean Suppress_Checks;
+extern Boolean Unnest_Subprogram_Mode;
 
 #define ZCX_Exceptions		opt__zcx_exceptions
 #define SJLJ_Exceptions		opt__sjlj_exceptions
@@ -248,6 +257,8 @@ extern Boolean SJLJ_Exceptions		(void);
   restrict__check_no_implicit_protected_alloc
 #define Check_No_Implicit_Task_Alloc	\
   restrict__check_no_implicit_task_alloc
+#define Check_Restriction_No_Dependence_On_System \
+  restrict__check_restriction_no_dependence_on_system
 #define No_Exception_Handlers_Set	\
   restrict__no_exception_handlers_set
 #define No_Exception_Propagation_Active	\
@@ -258,6 +269,7 @@ extern void Check_Implicit_Dynamic_Code_Allowed	(Node_Id);
 extern void Check_No_Implicit_Heap_Alloc	(Node_Id);
 extern void Check_No_Implicit_Protected_Alloc	(Node_Id);
 extern void Check_No_Implicit_Task_Alloc	(Node_Id);
+extern void Check_Restriction_No_Dependence_On_System (Name_Id, Node_Id);
 extern Boolean No_Exception_Handlers_Set	(void);
 extern Boolean No_Exception_Propagation_Active	(void);
 
@@ -288,24 +300,36 @@ extern Boolean Is_Derived_Type			(Entity_Id);
 /* sem_eval: */
 
 #define Compile_Time_Known_Value	sem_eval__compile_time_known_value
+#define Is_Null_Range			sem_eval__is_null_range
 
 extern Boolean Compile_Time_Known_Value	(Node_Id);
+extern Boolean Is_Null_Range 		(Node_Id, Node_Id);
 
 /* sem_util: */
 
 #define Defining_Entity			sem_util__defining_entity
 #define First_Actual			sem_util__first_actual
+#define Has_Storage_Model_Type_Aspect	sem_util__storage_model_support__has_storage_model_type_aspect
+#define Has_Designated_Storage_Model_Aspect sem_util__storage_model_support__has_designated_storage_model_aspect
 #define Is_Expression_Function		sem_util__is_expression_function
 #define Is_Variable_Size_Record 	sem_util__is_variable_size_record
 #define Needs_Secondary_Stack		sem_util__needs_secondary_stack
 #define Next_Actual			sem_util__next_actual
+#define Storage_Model_Object 		sem_util__storage_model_support__storage_model_object
+#define Storage_Model_Copy_From 	sem_util__storage_model_support__storage_model_copy_from
+#define Storage_Model_Copy_To 		sem_util__storage_model_support__storage_model_copy_to
 
 extern Entity_Id Defining_Entity		(Node_Id);
 extern Node_Id First_Actual			(Node_Id);
+extern Boolean Has_Storage_Model_Type_Aspect	(Entity_Id);
+extern Boolean Has_Designated_Storage_Model_Aspect (Entity_Id);
 extern Boolean Is_Expression_Function		(Entity_Id);
 extern Boolean Is_Variable_Size_Record 		(Entity_Id);
 extern Boolean Needs_Secondary_Stack		(Entity_Id);
 extern Node_Id Next_Actual			(Node_Id);
+extern Entity_Id Storage_Model_Object		(Entity_Id);
+extern Entity_Id Storage_Model_Copy_From	(Entity_Id);
+extern Entity_Id Storage_Model_Copy_To 		(Entity_Id);
 
 /* sinfo: */
 
@@ -347,9 +371,9 @@ extern Boolean Stack_Check_Probes_On_Target;
 
 /* warnsw: */
 
-#define Warn_On_Questionable_Layout	warnsw__warn_on_questionable_layout
+#define Get_Warn_On_Questionable_Layout	warnsw__get_warn_on_questionable_layout
 
-extern Boolean Warn_On_Questionable_Layout;
+extern Boolean Get_Warn_On_Questionable_Layout (void);
 
 // The following corresponds to Ada code in Einfo.Utils.
 

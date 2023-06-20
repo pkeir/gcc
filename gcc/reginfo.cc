@@ -1,5 +1,5 @@
 /* Compute different info about registers.
-   Copyright (C) 1987-2022 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -953,7 +953,7 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual unsigned int execute (function *) { return reginfo_init (); }
+  unsigned int execute (function *) final override { return reginfo_init (); }
 
 }; // class pass_reginfo_init
 
@@ -1134,9 +1134,9 @@ reg_scan_mark_refs (rtx x, rtx_insn *insn)
 }
 
 
-/* Return nonzero if C1 is a subset of C2, i.e., if every register in C1
+/* Return true if C1 is a subset of C2, i.e., if every register in C1
    is also in C2.  */
-int
+bool
 reg_class_subset_p (reg_class_t c1, reg_class_t c2)
 {
   return (c1 == c2
@@ -1145,8 +1145,8 @@ reg_class_subset_p (reg_class_t c1, reg_class_t c2)
 				   reg_class_contents[(int) c2]));
 }
 
-/* Return nonzero if there is a register that is in both C1 and C2.  */
-int
+/* Return true if there is a register that is in both C1 and C2.  */
+bool
 reg_classes_intersect_p (reg_class_t c1, reg_class_t c2)
 {
   return (c1 == c2

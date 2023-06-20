@@ -1,5 +1,5 @@
 /* Loop splitting.
-   Copyright (C) 2015-2022 Free Software Foundation, Inc.
+   Copyright (C) 2015-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -76,15 +76,13 @@ along with GCC; see the file COPYING3.  If not see
 static tree
 split_at_bb_p (class loop *loop, basic_block bb, tree *border, affine_iv *iv)
 {
-  gimple *last;
   gcond *stmt;
   affine_iv iv2;
 
   /* BB must end in a simple conditional jump.  */
-  last = last_stmt (bb);
-  if (!last || gimple_code (last) != GIMPLE_COND)
+  stmt = safe_dyn_cast <gcond *> (*gsi_last_bb (bb));
+  if (!stmt)
     return NULL_TREE;
-  stmt = as_a <gcond *> (last);
 
   enum tree_code code = gimple_cond_code (stmt);
 
@@ -158,7 +156,7 @@ patch_loop_exit (class loop *loop, gcond *guard, tree nextval, tree newbound,
 		 bool initial_true)
 {
   edge exit = single_exit (loop);
-  gcond *stmt = as_a <gcond *> (last_stmt (exit->src));
+  gcond *stmt = as_a <gcond *> (*gsi_last_bb (exit->src));
   gimple_cond_set_condition (stmt, gimple_cond_code (guard),
 			     nextval, newbound);
   update_stmt (stmt);
@@ -335,7 +333,7 @@ connect_loops (class loop *loop1, class loop *loop2)
   gimple_stmt_iterator gsi;
   edge new_e, skip_e;
 
-  gimple *stmt = last_stmt (exit->src);
+  gcond *stmt = as_a <gcond *> (*gsi_last_bb (exit->src));
   skip_stmt = gimple_build_cond (gimple_cond_code (stmt),
 				 gimple_cond_lhs (stmt),
 				 gimple_cond_rhs (stmt),
@@ -491,8 +489,6 @@ static void
 fix_loop_bb_probability (class loop *loop1, class loop *loop2, edge true_edge,
 			 edge false_edge)
 {
-  update_ssa (TODO_update_ssa);
-
   /* Proportion first loop's bb counts except those dominated by true
      branch to avoid drop 1s down.  */
   basic_block *bbs1, *bbs2;
@@ -533,16 +529,17 @@ split_loop (class loop *loop1)
   tree guard_iv;
   tree border = NULL_TREE;
   affine_iv iv;
+  edge exit1;
 
-  if (!single_exit (loop1)
+  if (!(exit1 = single_exit (loop1))
+      || EDGE_COUNT (exit1->src->succs) != 2
       /* ??? We could handle non-empty latches when we split the latch edge
 	 (not the exit edge), and put the new exit condition in the new block.
 	 OTOH this executes some code unconditionally that might have been
 	 skipped by the original exit before.  */
       || !empty_block_p (loop1->latch)
       || !easy_exit_values (loop1)
-      || !number_of_iterations_exit (loop1, single_exit (loop1), &niter,
-				     false, true)
+      || !number_of_iterations_exit (loop1, exit1, &niter, false, true)
       || niter.cmp == ERROR_MARK
       /* We can't yet handle loops controlled by a != predicate.  */
       || niter.cmp == NE_EXPR)
@@ -572,7 +569,7 @@ split_loop (class loop *loop1)
 	gphi *phi = find_or_create_guard_phi (loop1, guard_iv, &iv);
 	if (!phi)
 	  continue;
-	gcond *guard_stmt = as_a<gcond *> (last_stmt (bbs[i]));
+	gcond *guard_stmt = as_a<gcond *> (*gsi_last_bb (bbs[i]));
 	tree guard_init = PHI_ARG_DEF_FROM_EDGE (phi,
 						 loop_preheader_edge (loop1));
 	enum tree_code guard_code = gimple_cond_code (guard_stmt);
@@ -646,15 +643,18 @@ split_loop (class loop *loop1)
 	fix_loop_bb_probability (loop1, loop2, true_edge, false_edge);
 
 	/* Fix first loop's exit probability after scaling.  */
-	edge exit_to_latch1 = single_pred_edge (loop1->latch);
+	edge exit_to_latch1;
+	if (EDGE_SUCC (exit1->src, 0) == exit1)
+	  exit_to_latch1 = EDGE_SUCC (exit1->src, 1);
+	else
+	  exit_to_latch1 = EDGE_SUCC (exit1->src, 0);
 	exit_to_latch1->probability *= true_edge->probability;
-	single_exit (loop1)->probability
-	  = exit_to_latch1->probability.invert ();
+	exit1->probability = exit_to_latch1->probability.invert ();
 
 	/* Finally patch out the two copies of the condition to be always
 	   true/false (or opposite).  */
-	gcond *force_true = as_a<gcond *> (last_stmt (bbs[i]));
-	gcond *force_false = as_a<gcond *> (last_stmt (get_bb_copy (bbs[i])));
+	gcond *force_true = as_a<gcond *> (*gsi_last_bb (bbs[i]));
+	gcond *force_false = as_a<gcond *> (*gsi_last_bb (get_bb_copy (bbs[i])));
 	if (!initial_true)
 	  std::swap (force_true, force_false);
 	gimple_cond_make_true (force_true);
@@ -1146,8 +1146,7 @@ control_dep_semi_invariant_p (struct loop *loop, basic_block bb,
   for (hash_set<basic_block>::iterator iter = dep_bbs->begin ();
        iter != dep_bbs->end (); ++iter)
     {
-      gimple *last = last_stmt (*iter);
-
+      gimple *last = *gsi_last_bb (*iter);
       if (!last)
 	return false;
 
@@ -1391,7 +1390,7 @@ compute_added_num_insns (struct loop *loop, const_edge branch_edge)
 
   auto_vec<gimple *> worklist;
   hash_set<gimple *> removed;
-  gimple *stmt = last_stmt (cond_bb);
+  gimple *stmt = last_nondebug_stmt (cond_bb);
 
   worklist.safe_push (stmt);
   removed.add (stmt);
@@ -1518,7 +1517,7 @@ do_split_loop_on_cond (struct loop *loop1, edge invar_branch)
 {
   basic_block cond_bb = invar_branch->src;
   bool true_invar = !!(invar_branch->flags & EDGE_TRUE_VALUE);
-  gcond *cond = as_a <gcond *> (last_stmt (cond_bb));
+  gcond *cond = as_a <gcond *> (*gsi_last_bb (cond_bb));
 
   gcc_assert (cond_bb->loop_father == loop1);
 
@@ -1542,7 +1541,7 @@ do_split_loop_on_cond (struct loop *loop1, edge invar_branch)
     }
 
   basic_block cond_bb_copy = get_bb_copy (cond_bb);
-  gcond *cond_copy = as_a<gcond *> (last_stmt (cond_bb_copy));
+  gcond *cond_copy = as_a<gcond *> (*gsi_last_bb (cond_bb_copy));
 
   /* Replace the condition in loop2 with a bool constant to let PassManager
      remove the variant branch after current pass completes.  */
@@ -1626,12 +1625,10 @@ split_loop_on_cond (struct loop *loop)
       if (!dominated_by_p (CDI_DOMINATORS, loop->latch, bb))
 	continue;
 
-      gimple *last = last_stmt (bb);
-
-      if (!last || gimple_code (last) != GIMPLE_COND)
+      gcond *cond = safe_dyn_cast <gcond *> (*gsi_last_bb (bb));
+      if (!cond)
 	continue;
 
-      gcond *cond = as_a <gcond *> (last);
       edge branch_edge = get_cond_branch_to_split_loop (loop, cond);
 
       if (branch_edge)
@@ -1668,7 +1665,8 @@ tree_ssa_split_loops (void)
       if (loop->aux)
 	{
 	  /* If any of our inner loops was split, don't split us,
-	     and mark our containing loop as having had splits as well.  */
+	     and mark our containing loop as having had splits as well.
+	     This allows for delaying SSA update.  */
 	  loop_outer (loop)->aux = loop;
 	  continue;
 	}
@@ -1724,8 +1722,8 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual bool gate (function *) { return flag_split_loops != 0; }
-  virtual unsigned int execute (function *);
+  bool gate (function *) final override { return flag_split_loops != 0; }
+  unsigned int execute (function *) final override;
 
 }; // class pass_loop_split
 

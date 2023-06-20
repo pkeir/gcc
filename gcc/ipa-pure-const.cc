@@ -1,5 +1,5 @@
 /* Callgraph based analysis of static variables.
-   Copyright (C) 2004-2022 Free Software Foundation, Inc.
+   Copyright (C) 2004-2023 Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck <zadeck@naturalbridge.com>
 
 This file is part of GCC.
@@ -168,8 +168,8 @@ public:
   pass_ipa_pure_const(gcc::context *ctxt);
 
   /* opt_pass methods: */
-  bool gate (function *) { return gate_pure_const (); }
-  unsigned int execute (function *fun);
+  bool gate (function *) final override { return gate_pure_const (); }
+  unsigned int execute (function *fun) final override;
 
   void register_hooks (void);
 
@@ -1526,8 +1526,9 @@ ipa_make_function_pure (struct cgraph_node *node, bool looping, bool local)
 {
   bool cdtor = false;
 
-  if (DECL_PURE_P (node->decl)
-      && (looping || !DECL_LOOPING_CONST_OR_PURE_P (node->decl)))
+  if (TREE_READONLY (node->decl)
+      || (DECL_PURE_P (node->decl)
+	  && (looping || !DECL_LOOPING_CONST_OR_PURE_P (node->decl))))
     return false;
   warn_function_pure (node->decl, !looping);
   if (local && skip_function_for_local_pure_const (node))
@@ -2154,9 +2155,12 @@ public:
   {}
 
   /* opt_pass methods: */
-  opt_pass * clone () { return new pass_local_pure_const (m_ctxt); }
-  virtual bool gate (function *) { return gate_pure_const (); }
-  virtual unsigned int execute (function *);
+  opt_pass * clone () final override
+  {
+    return new pass_local_pure_const (m_ctxt);
+  }
+  bool gate (function *) final override { return gate_pure_const (); }
+  unsigned int execute (function *) final override;
 
 }; // class pass_local_pure_const
 
@@ -2270,8 +2274,11 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual bool gate (function *) { return warn_suggest_attribute_noreturn; }
-  virtual unsigned int execute (function *fun)
+  bool gate (function *) final override
+  {
+    return warn_suggest_attribute_noreturn;
+  }
+  unsigned int execute (function *fun) final override
     {
       if (!TREE_THIS_VOLATILE (current_function_decl)
 	  && EDGE_COUNT (EXIT_BLOCK_PTR_FOR_FN (fun)->preds) == 0)
@@ -2316,9 +2323,9 @@ public:
   {}
 
   /* opt_pass methods: */
-  opt_pass * clone () { return new pass_nothrow (m_ctxt); }
-  virtual bool gate (function *) { return optimize; }
-  virtual unsigned int execute (function *);
+  opt_pass * clone () final override { return new pass_nothrow (m_ctxt); }
+  bool gate (function *) final override { return optimize; }
+  unsigned int execute (function *) final override;
 
 }; // class pass_nothrow
 
@@ -2372,16 +2379,15 @@ pass_nothrow::execute (function *)
   bool cfg_changed = false;
   if (self_recursive_p (node))
     FOR_EACH_BB_FN (this_block, cfun)
-      if (gimple *g = last_stmt (this_block))
-	if (is_gimple_call (g))
-	  {
-	    tree callee_t = gimple_call_fndecl (g);
-	    if (callee_t
-		&& recursive_call_p (current_function_decl, callee_t)
-		&& maybe_clean_eh_stmt (g)
-		&& gimple_purge_dead_eh_edges (this_block))
-	      cfg_changed = true;
-	  }
+      if (gcall *g = safe_dyn_cast <gcall *> (*gsi_last_bb (this_block)))
+	{
+	  tree callee_t = gimple_call_fndecl (g);
+	  if (callee_t
+	      && recursive_call_p (current_function_decl, callee_t)
+	      && maybe_clean_eh_stmt (g)
+	      && gimple_purge_dead_eh_edges (this_block))
+	    cfg_changed = true;
+	}
 
   if (dump_file)
     fprintf (dump_file, "Function found to be nothrow: %s\n",

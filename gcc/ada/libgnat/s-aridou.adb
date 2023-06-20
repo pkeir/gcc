@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -45,7 +45,8 @@ is
                             Contract_Cases => Ignore,
                             Ghost          => Ignore,
                             Loop_Invariant => Ignore,
-                            Assert         => Ignore);
+                            Assert         => Ignore,
+                            Assert_And_Cut => Ignore);
 
    pragma Suppress (Overflow_Check);
    pragma Suppress (Range_Check);
@@ -126,7 +127,7 @@ is
      Pre => B /= 0;
    --  Length doubling remainder
 
-   function Big_2xx (N : Natural) return Big_Integer is
+   function Big_2xx (N : Natural) return Big_Positive is
      (Big (Double_Uns'(2 ** N)))
    with
      Ghost,
@@ -138,7 +139,9 @@ is
      (Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (X1))
                     + Big_2xxSingle * Big (Double_Uns (X2))
                                     + Big (Double_Uns (X3)))
-   with Ghost;
+   with
+     Ghost,
+     Annotate => (GNATprove, Inline_For_Proof);
    --  X1&X2&X3 as a big integer
 
    function Le3 (X1, X2, X3, Y1, Y2, Y3 : Single_Uns) return Boolean
@@ -162,9 +165,8 @@ is
 
    function To_Neg_Int (A : Double_Uns) return Double_Int
    with
-     Annotate => (GNATprove, Terminating),
-     Pre      => In_Double_Int_Range (-Big (A)),
-     Post     => Big (To_Neg_Int'Result) = -Big (A);
+     Pre  => In_Double_Int_Range (-Big (A)),
+     Post => Big (To_Neg_Int'Result) = -Big (A);
    --  Convert to negative integer equivalent. If the input is in the range
    --  0 .. 2 ** (Double_Size - 1), then the corresponding nonpositive signed
    --  integer (obtained by negating the given value) is returned, otherwise
@@ -172,9 +174,8 @@ is
 
    function To_Pos_Int (A : Double_Uns) return Double_Int
    with
-     Annotate => (GNATprove, Terminating),
-     Pre      => In_Double_Int_Range (Big (A)),
-     Post     => Big (To_Pos_Int'Result) = Big (A);
+     Pre  => In_Double_Int_Range (Big (A)),
+     Post => Big (To_Pos_Int'Result) = Big (A);
    --  Convert to positive integer equivalent. If the input is in the range
    --  0 .. 2 ** (Double_Size - 1) - 1, then the corresponding non-negative
    --  signed integer is returned, otherwise constraint error is raised.
@@ -233,6 +234,17 @@ is
      Ghost,
      Pre  => X /= Double_Uns'Last,
      Post => Big (X + Double_Uns'(1)) = Big (X) + 1;
+
+   procedure Lemma_Big_Of_Double_Uns (X : Double_Uns)
+   with
+     Ghost,
+     Post => Big (X) < Big_2xxDouble;
+
+   procedure Lemma_Big_Of_Double_Uns_Of_Single_Uns (X : Single_Uns)
+   with
+     Ghost,
+     Post => Big (Double_Uns (X)) >= 0
+       and then Big (Double_Uns (X)) < Big_2xxSingle;
 
    procedure Lemma_Bounded_Powers_Of_2_Increasing (M, N : Natural)
    with
@@ -438,12 +450,18 @@ is
      Ghost,
      Post => X * (Y + Z) = X * Y + X * Z;
 
+   procedure Lemma_Mult_Div (A, B : Big_Integer)
+   with
+     Ghost,
+     Pre  => B /= 0,
+     Post => A * B / B = A;
+
    procedure Lemma_Mult_Non_Negative (X, Y : Big_Integer)
    with
      Ghost,
-     Pre  => (X >= Big_0 and then Y >= Big_0)
-       or else (X <= Big_0 and then Y <= Big_0),
-     Post => X * Y >= Big_0;
+     Pre  => (X >= 0 and then Y >= 0)
+       or else (X <= 0 and then Y <= 0),
+     Post => X * Y >= 0;
 
    procedure Lemma_Mult_Non_Positive (X, Y : Big_Integer)
    with
@@ -451,6 +469,13 @@ is
      Pre  => (X <= Big_0 and then Y >= Big_0)
        or else (X >= Big_0 and then Y <= Big_0),
      Post => X * Y <= Big_0;
+
+   procedure Lemma_Mult_Positive (X, Y : Big_Integer)
+   with
+     Ghost,
+     Pre  => (X > Big_0 and then Y > Big_0)
+       or else (X < Big_0 and then Y < Big_0),
+     Post => X * Y > Big_0;
 
    procedure Lemma_Neg_Div (X, Y : Big_Integer)
    with
@@ -468,6 +493,12 @@ is
    with
      Post => not In_Double_Int_Range (Big_2xxDouble)
        and then not In_Double_Int_Range (-Big_2xxDouble);
+
+   procedure Lemma_Powers (A : Big_Natural; B, C : Natural)
+   with
+     Ghost,
+     Pre  => B <= Natural'Last - C,
+     Post => A**B * A**C = A**(B + C);
 
    procedure Lemma_Powers_Of_2 (M, N : Natural)
    with
@@ -592,6 +623,8 @@ is
    procedure Lemma_Abs_Range (X : Big_Integer) is null;
    procedure Lemma_Add_Commutation (X : Double_Uns; Y : Single_Uns) is null;
    procedure Lemma_Add_One (X : Double_Uns) is null;
+   procedure Lemma_Big_Of_Double_Uns (X : Double_Uns) is null;
+   procedure Lemma_Big_Of_Double_Uns_Of_Single_Uns (X : Single_Uns) is null;
    procedure Lemma_Bounded_Powers_Of_2_Increasing (M, N : Natural) is null;
    procedure Lemma_Deep_Mult_Commutation
      (Factor : Big_Integer;
@@ -606,7 +639,6 @@ is
    is null;
    procedure Lemma_Div_Ge (X, Y, Z : Big_Integer) is null;
    procedure Lemma_Div_Lt (X, Y, Z : Big_Natural) is null;
-   procedure Lemma_Div_Eq (A, B, S, R : Big_Integer) is null;
    procedure Lemma_Double_Big_2xxSingle is null;
    procedure Lemma_Double_Shift (X : Double_Uns; S, S1 : Double_Uns) is null;
    procedure Lemma_Double_Shift (X : Single_Uns; S, S1 : Natural) is null;
@@ -627,8 +659,10 @@ is
    procedure Lemma_Mult_Distribution (X, Y, Z : Big_Integer) is null;
    procedure Lemma_Mult_Non_Negative (X, Y : Big_Integer) is null;
    procedure Lemma_Mult_Non_Positive (X, Y : Big_Integer) is null;
+   procedure Lemma_Mult_Positive (X, Y : Big_Integer) is null;
    procedure Lemma_Neg_Rem (X, Y : Big_Integer) is null;
    procedure Lemma_Not_In_Range_Big2xx64 is null;
+   procedure Lemma_Powers (A : Big_Natural; B, C : Natural) is null;
    procedure Lemma_Rem_Commutation (X, Y : Double_Uns) is null;
    procedure Lemma_Rem_Is_Ident (X, Y : Big_Integer) is null;
    procedure Lemma_Rem_Sign (X, Y : Big_Integer) is null;
@@ -864,6 +898,23 @@ is
         Post => abs Big_Q = Big (Qu);
       --  Proves correctness of the rounding of the unsigned quotient
 
+      procedure Prove_Sign_Quotient
+      with
+        Ghost,
+        Pre  => Mult /= 0
+          and then Quot = Big (X) / (Big (Y) * Big (Z))
+          and then Big_R = Big (X) rem (Big (Y) * Big (Z))
+          and then Big_Q =
+            (if Round then
+               Round_Quotient (Big (X), Big (Y) * Big (Z), Quot, Big_R)
+             else Quot),
+        Post =>
+          (if X >= 0 then
+             (if Den_Pos then Big_Q >= 0 else Big_Q <= 0)
+           else
+             (if Den_Pos then Big_Q <= 0 else Big_Q >= 0));
+      --  Proves the correct sign of the signed quotient Big_Q
+
       procedure Prove_Signs
       with
         Ghost,
@@ -880,7 +931,13 @@ is
           and then
             Q = (if (X >= 0) = Den_Pos then To_Int (Qu) else To_Int (-Qu))
           and then not (X = Double_Int'First and then Big (Y) * Big (Z) = -1),
-        Post => Big (R) = Big_R and then Big (Q) = Big_Q;
+        Post => Big (R) = Big (X) rem (Big (Y) * Big (Z))
+          and then
+            (if Round then
+               Big (Q) = Round_Quotient (Big (X), Big (Y) * Big (Z),
+                                         Big (X) / (Big (Y) * Big (Z)),
+                                         Big (R))
+             else Big (Q) = Big (X) / (Big (Y) * Big (Z)));
       --  Proves final signs match the intended result after the unsigned
       --  division is done.
 
@@ -891,6 +948,7 @@ is
       procedure Prove_Overflow_Case is null;
       procedure Prove_Quotient_Zero is null;
       procedure Prove_Round_To_One is null;
+      procedure Prove_Sign_Quotient is null;
 
       -------------------------
       -- Prove_Rounding_Case --
@@ -1005,17 +1063,10 @@ is
 
       T1 := Ylo * Zlo;
 
-      pragma Assert (Big (T2) = Big (Double_Uns'(Yhi * Zlo))
-                              + Big (Double_Uns'(Ylo * Zhi)));
       Lemma_Mult_Distribution (Big_2xxSingle,
                                Big (Double_Uns'(Yhi * Zlo)),
                                Big (Double_Uns'(Ylo * Zhi)));
-      pragma Assert (Mult = Big_2xxSingle * Big (T2) + Big (T1));
       Lemma_Hi_Lo (T1, Hi (T1), Lo (T1));
-      pragma Assert
-        (Mult = Big_2xxSingle * Big (T2)
-              + Big_2xxSingle * Big (Double_Uns (Hi (T1)))
-                              + Big (Double_Uns (Lo (T1))));
       Lemma_Mult_Distribution (Big_2xxSingle,
                                Big (T2),
                                Big (Double_Uns (Hi (T1))));
@@ -1023,17 +1074,11 @@ is
 
       T2 := T2 + Hi (T1);
 
-      pragma Assert
-        (Mult = Big_2xxSingle * Big (T2) + Big (Double_Uns (Lo (T1))));
       Lemma_Hi_Lo (T2, Hi (T2), Lo (T2));
       Lemma_Mult_Distribution (Big_2xxSingle,
                                Big (Double_Uns (Hi (T2))),
                                Big (Double_Uns (Lo (T2))));
       Lemma_Double_Big_2xxSingle;
-      pragma Assert
-        (Mult = Big_2xxDouble * Big (Double_Uns (Hi (T2)))
-              + Big_2xxSingle * Big (Double_Uns (Lo (T2)))
-                              + Big (Double_Uns (Lo (T1))));
 
       if Hi (T2) /= 0 then
          R := X;
@@ -1056,6 +1101,8 @@ is
             pragma Assert (Big (Double_Uns (Hi (T2))) >= 1);
             pragma Assert (Big (Double_Uns (Lo (T2))) >= 0);
             pragma Assert (Big (Double_Uns (Lo (T1))) >= 0);
+            pragma Assert (Big_2xxSingle * Big (Double_Uns (Lo (T2)))
+                                         + Big (Double_Uns (Lo (T1))) >= 0);
             pragma Assert (Mult >= Big_2xxDouble * Big (Double_Uns (Hi (T2))));
             pragma Assert (Mult >= Big_2xxDouble);
             if Hi (T2) > 1 then
@@ -1064,6 +1111,10 @@ is
                                  Mult > Big_2xxDouble);
             elsif Lo (T2) > 0 then
                pragma Assert (Big (Double_Uns (Lo (T2))) > 0);
+               pragma Assert (Big_2xxSingle > 0);
+               pragma Assert (Big_2xxSingle * Big (Double_Uns (Lo (T2))) > 0);
+               pragma Assert (Big_2xxSingle * Big (Double_Uns (Lo (T2)))
+                                            + Big (Double_Uns (Lo (T1))) > 0);
                pragma Assert (if X = Double_Int'First and then Round then
                                  Mult > Big_2xxDouble);
             elsif Lo (T1) > 0 then
@@ -1138,6 +1189,7 @@ is
       end if;
 
       pragma Assert (abs Big_Q = Big (Qu));
+      Prove_Sign_Quotient;
 
       --  Set final signs (RM 4.5.5(27-30))
 
@@ -1224,6 +1276,18 @@ is
       pragma Assert (Hi = Double_Uns'(2 ** Single_Size) * Double_Uns (X));
       pragma Assert ((Hi or Lo) = Hi + Lo);
    end Lemma_Concat_Definition;
+
+   ------------------
+   -- Lemma_Div_Eq --
+   ------------------
+
+   procedure Lemma_Div_Eq (A, B, S, R : Big_Integer) is
+   begin
+      pragma Assert ((A - B) * S = R);
+      pragma Assert ((A - B) * S / S = R / S);
+      Lemma_Mult_Div (A - B, S);
+      pragma Assert (A - B = R / S);
+   end Lemma_Div_Eq;
 
    ------------------------
    -- Lemma_Double_Shift --
@@ -1317,6 +1381,19 @@ is
                                       + Big (Double_Uns'(Xlo * Ylo)));
    end Lemma_Mult_Decomposition;
 
+   --------------------
+   -- Lemma_Mult_Div --
+   --------------------
+
+   procedure Lemma_Mult_Div (A, B : Big_Integer) is
+   begin
+      if B > 0 then
+         pragma Assert (A * B / B = A);
+      else
+         pragma Assert (A * (-B) / (-B) = A);
+      end if;
+   end Lemma_Mult_Div;
+
    -------------------
    -- Lemma_Neg_Div --
    -------------------
@@ -1341,6 +1418,7 @@ is
       Lemma_Powers_Of_2_Commutation (M);
       Lemma_Powers_Of_2_Commutation (N);
       Lemma_Powers_Of_2_Commutation (M + N);
+      Lemma_Powers (Big (Double_Uns'(2)), M, N);
 
       if M + N < Double_Size then
          pragma Assert (Big (Double_Uns'(2))**M * Big (Double_Uns'(2))**N
@@ -1446,14 +1524,35 @@ is
         Post => X / Double_Uns'(2) ** I / Double_Uns'(2)
           = X / Double_Uns'(2) ** (I + 1);
 
+      procedure Lemma_Quot_Rem (X, Div, Q, R : Double_Uns)
+      with
+        Ghost,
+        Pre  => Div /= 0
+          and then X = Q * Div + R
+          and then Q <= Double_Uns'Last / Div
+          and then R <= Double_Uns'Last - Q * Div
+          and then R < Div,
+        Post => Q = X / Div;
+      pragma Annotate (GNATprove, False_Positive, "postcondition might fail",
+                       "Q is the quotient of X by Div");
+
       procedure Lemma_Div_Pow2 (X : Double_Uns; I : Natural) is
          Div1 : constant Double_Uns := Double_Uns'(2) ** I;
          Div2 : constant Double_Uns := Double_Uns'(2);
          Left : constant Double_Uns := X / Div1 / Div2;
+         R2   : constant Double_Uns := X / Div1 - Left * Div2;
+         pragma Assert (R2 <= Div2 - 1);
+         R1   : constant Double_Uns := X - X / Div1 * Div1;
+         pragma Assert (R1 < Div1);
       begin
+         pragma Assert (X = Left * (Div1 * Div2) + R2 * Div1 + R1);
+         pragma Assert (R2 * Div1 + R1 < Div1 * Div2);
+         Lemma_Quot_Rem (X, Div1 * Div2, Left, R2 * Div1 + R1);
          pragma Assert (Left = X / (Div1 * Div2));
          pragma Assert (Div1 * Div2 = Double_Uns'(2) ** (I + 1));
       end Lemma_Div_Pow2;
+
+      procedure Lemma_Quot_Rem (X, Div, Q, R : Double_Uns) is null;
 
       XX : Double_Uns := X;
 
@@ -1516,6 +1615,8 @@ is
       pragma Assert (X < 2**(Double_Size - Shift));
       pragma Assert (Big (X) < Big_2xx (Double_Size - Shift));
       pragma Assert (Y = 2**Shift * X);
+      Lemma_Lt_Mult (Big (X), Big_2xx (Double_Size - Shift), Big_2xx (Shift),
+                     Big_2xx (Shift) * Big_2xx (Double_Size - Shift));
       pragma Assert (Big_2xx (Shift) * Big (X)
                      < Big_2xx (Shift) * Big_2xx (Double_Size - Shift));
       Lemma_Powers_Of_2 (Shift, Double_Size - Shift);
@@ -1817,7 +1918,7 @@ is
 
       --  Local ghost variables
 
-      Mult  : constant Big_Integer := abs (Big (X) * Big (Y)) with Ghost;
+      Mult  : constant Big_Natural := abs (Big (X) * Big (Y)) with Ghost;
       Quot  : Big_Integer with Ghost;
       Big_R : Big_Integer with Ghost;
       Big_Q : Big_Integer with Ghost;
@@ -1833,7 +1934,9 @@ is
                               + Big_2xxSingle * Big_2xxSingle * D2
                                               + Big_2xxSingle * D3
                                                               + D4)
-      with Ghost;
+      with
+        Ghost,
+        Annotate => (GNATprove, Inline_For_Proof);
 
       function Is_Scaled_Mult_Decomposition
         (D1, D2, D3, D4 : Big_Integer)
@@ -1846,7 +1949,8 @@ is
                                                            + D4)
       with
         Ghost,
-        Pre  => Scale < Double_Size;
+        Annotate => (GNATprove, Inline_For_Proof),
+        Pre => Scale < Double_Size;
 
       --  Local lemmas
 
@@ -1883,6 +1987,15 @@ is
         Post => Big3 (S1, S2, S3) = Big (Double_Uns (Q)) * Big (Zu);
       --  Proves correctness of the multiplication of divisor by quotient to
       --  compute amount to subtract.
+
+      procedure Prove_Mult_Decomposition_Split3
+        (D1, D2, D3, D3_Hi, D3_Lo, D4 : Big_Integer)
+      with
+        Ghost,
+        Pre  => Is_Mult_Decomposition (D1, D2, D3, D4)
+          and then D3 = Big_2xxSingle * D3_Hi + D3_Lo,
+        Post => Is_Mult_Decomposition (D1, D2 + D3_Hi, D3_Lo, D4);
+      --  Proves decomposition of Mult after splitting third component
 
       procedure Prove_Negative_Dividend
       with
@@ -1995,6 +2108,30 @@ is
            else abs Quot);
       --  Proves correctness of the rounding of the unsigned quotient
 
+      procedure Prove_Scaled_Mult_Decomposition_Regroup24
+        (D1, D2, D3, D4 : Big_Integer)
+      with
+        Ghost,
+        Pre  => Scale < Double_Size
+          and then Is_Scaled_Mult_Decomposition (D1, D2, D3, D4),
+        Post => Is_Scaled_Mult_Decomposition
+          (0, Big_2xxSingle * D1 + D2, 0, Big_2xxSingle * D3 + D4);
+      --  Proves scaled decomposition of Mult after regrouping on second and
+      --  fourth component.
+
+      procedure Prove_Scaled_Mult_Decomposition_Regroup3
+        (D1, D2, D3, D4 : Single_Uns)
+      with
+        Ghost,
+        Pre  => Scale < Double_Size
+          and then Is_Scaled_Mult_Decomposition
+            (Big (Double_Uns (D1)), Big (Double_Uns (D2)),
+             Big (Double_Uns (D3)), Big (Double_Uns (D4))),
+        Post => Is_Scaled_Mult_Decomposition (0, 0, Big3 (D1, D2, D3),
+                                              Big (Double_Uns (D4)));
+      --  Proves scaled decomposition of Mult after regrouping on third
+      --  component.
+
       procedure Prove_Sign_R
       with
         Ghost,
@@ -2063,8 +2200,8 @@ is
 
       begin
          Lemma_Shift_Left (D (1) & D (2), Scale);
-         pragma Assert (By (Big_2xxSingle * Big_2xx (Scale) <= Big_2xxDouble,
-                            Big_2xx (Scale) <= Big_2xxSingle));
+         Lemma_Ge_Mult (Big_2xxSingle, Big_2xx (Scale), Big_2xxSingle,
+                        Big_2xxSingle * Big_2xx (Scale));
          Lemma_Lt_Mult (Big (Double_Uns (D (3))), Big_2xxSingle,
                         Big_2xx (Scale), Big_2xxDouble);
          Lemma_Shift_Left (Double_Uns (D (3)), Scale);
@@ -2092,17 +2229,8 @@ is
          pragma Assert (Big_D3 = Big_T2);
          pragma Assert (Big_2xxSingle * Big_D3 = Big_2xxSingle * Big_T2);
          Lemma_Mult_Commutation (2 ** Scale, Double_Uns (D (4)), T3);
-         pragma Assert (Big_D4 = Big_T3);
          pragma Assert
-           (By (Is_Scaled_Mult_Decomposition (0, Big_T1, Big_T2, Big_T3),
-            By (Big_2xxSingle * Big_2xxSingle * Big_D12 =
-                Big_2xxSingle * Big_2xxSingle * Big_T1,
-                Big_D12 = Big_T1)
-              and then
-            By (Big_2xxSingle * Big_D3  = Big_2xxSingle * Big_T2,
-                Big_D3 = Big_T2)
-              and then
-            Big_D4 = Big_T3));
+           (Is_Scaled_Mult_Decomposition (0, Big_T1, Big_T2, Big_T3));
          Lemma_Hi_Lo (T1, Hi (T1), Lo (T1));
          Lemma_Hi_Lo (T2, Hi (T2), Lo (T2));
          Lemma_Hi_Lo (T3, Hi (T3), Lo (T3));
@@ -2118,60 +2246,6 @@ is
          Lemma_Mult_Distribution (Big_2xxSingle,
                                   Big (Double_Uns (Lo (T2))),
                                   Big (Double_Uns (Hi (T3))));
-         pragma Assert
-           (By (Is_Scaled_Mult_Decomposition
-              (Big (Double_Uns (Hi (T1))),
-               Big (Double_Uns (Lo (T1))) + Big (Double_Uns (Hi (T2))),
-               Big (Double_Uns (Lo (T2))) + Big (Double_Uns (Hi (T3))),
-               Big (Double_Uns (Lo (T3)))),
-            --  Start from stating equality between the expanded values of
-            --  the right-hand side in the known and desired assertions over
-            --  Is_Scaled_Mult_Decomposition.
-            By (Big_2xxSingle * Big_2xxSingle * Big_2xxSingle *
-              Big (Double_Uns (Hi (T1)))
-            + Big_2xxSingle * Big_2xxSingle *
-              (Big (Double_Uns (Lo (T1))) + Big (Double_Uns (Hi (T2))))
-            + Big_2xxSingle *
-              (Big (Double_Uns (Lo (T2))) + Big (Double_Uns (Hi (T3))))
-            + Big (Double_Uns (Lo (T3))) =
-              Big_2xxSingle * Big_2xxSingle * Big_2xxSingle * 0
-            + Big_2xxSingle * Big_2xxSingle * Big_T1
-            + Big_2xxSingle * Big_T2
-            + Big_T3,
-              --  Now list all known equalities that contribute
-              Big_2xxSingle * Big_2xxSingle * Big_2xxSingle *
-              Big (Double_Uns (Hi (T1)))
-            + Big_2xxSingle * Big_2xxSingle *
-              (Big (Double_Uns (Lo (T1))) + Big (Double_Uns (Hi (T2))))
-            + Big_2xxSingle *
-              (Big (Double_Uns (Lo (T2))) + Big (Double_Uns (Hi (T3))))
-            + Big (Double_Uns (Lo (T3))) =
-              Big_2xxSingle * Big_2xxSingle * Big_2xxSingle *
-                Big (Double_Uns (Hi (T1)))
-            + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Lo (T1)))
-            + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-            + Big_2xxSingle * Big (Double_Uns (Lo (T2)))
-            + Big_2xxSingle * Big (Double_Uns (Hi (T3)))
-            + Big (Double_Uns (Lo (T3)))
-              and then
-            By (Big_2xxSingle * Big_2xxSingle * Big (T1)
-            = Big_2xxSingle * Big_2xxSingle * Big_2xxSingle
-            * Big (Double_Uns (Hi (T1)))
-            + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Lo (T1))),
-            Big_2xxSingle * Big_2xxSingle * Big (T1)
-            = Big_2xxSingle * Big_2xxSingle
-            * (Big_2xxSingle * Big (Double_Uns (Hi (T1)))
-               + Big (Double_Uns (Lo (T1)))))
-              and then
-            By (Big_2xxSingle * Big (T2)
-            = Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-            + Big_2xxSingle * Big (Double_Uns (Lo (T2))),
-            Big_2xxSingle * Big (T2)
-            = Big_2xxSingle * (Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-              + Big (Double_Uns (Lo (T2)))))
-              and then
-            Big (T3) = Big_2xxSingle * Big (Double_Uns (Hi (T3)))
-            + Big (Double_Uns (Lo (T3))))));
          Lemma_Mult_Distribution (Big_2xxSingle * Big_2xxSingle,
                                   Big (Double_Uns (Lo (T1))),
                                   Big (Double_Uns (Hi (T2))));
@@ -2181,24 +2255,6 @@ is
                           Double_Uns (Lo (T2)) + Double_Uns (Hi (T3)));
          Lemma_Add_Commutation (Double_Uns (Lo (T1)), Hi (T2));
          Lemma_Add_Commutation (Double_Uns (Lo (T2)), Hi (T3));
-         pragma Assert
-           (By (Is_Scaled_Mult_Decomposition
-              (Big (Double_Uns (Hi (T1))),
-               Big (Double_Uns (Lo (T1) or Hi (T2))),
-               Big (Double_Uns (Lo (T2) or Hi (T3))),
-               Big (Double_Uns (Lo (T3)))),
-            By (Big_2xxSingle * Big_2xxSingle
-              * Big (Double_Uns (Lo (T1) or Hi (T2))) =
-                Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Lo (T1)))
-              + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T2))),
-              Big_2xxSingle * Big_2xxSingle
-              * Big (Double_Uns (Lo (T1)) + Double_Uns (Hi (T2))) =
-                Big_2xxSingle * Big_2xxSingle
-              * (Big (Double_Uns (Lo (T1))) + Big (Double_Uns (Hi (T2)))))
-              and then
-            Big_2xxSingle * Big (Double_Uns (Lo (T2) or Hi (T3))) =
-            Big_2xxSingle * Big (Double_Uns (Lo (T2)))
-            + Big_2xxSingle * Big (Double_Uns (Hi (T3)))));
       end Prove_Dividend_Scaling;
 
       --------------------------
@@ -2213,23 +2269,47 @@ is
          Lemma_Hi_Lo (T3, Hi (T3), S2);
          Lemma_Mult_Commutation (Double_Uns (Q), Double_Uns (Lo (Zu)), T1);
          Lemma_Mult_Commutation (Double_Uns (Q), Double_Uns (Hi (Zu)), T2);
-         pragma Assert (Big (Double_Uns (Q)) * Big (Zu) =
-                          Big_2xxSingle * Big (T2) + Big (T1));
+         Lemma_Mult_Distribution (Big (Double_Uns (Q)),
+                                  Big_2xxSingle * Big (Double_Uns (Hi (Zu))),
+                                  Big (Double_Uns (Lo (Zu))));
+         Lemma_Substitution
+           (Big (Double_Uns (Q)) * Big (Zu),
+            Big (Double_Uns (Q)),
+            Big (Zu),
+            Big_2xxSingle * Big (Double_Uns (Hi (Zu)))
+              + Big (Double_Uns (Lo (Zu))),
+            Big_0);
          pragma Assert (Big (Double_Uns (Q)) * Big (Zu) =
            Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-         + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T3)))
-                         + Big_2xxSingle * Big (Double_Uns (S2))
+                         + Big_2xxSingle * Big (Double_Uns (Lo (T2)))
+                         + Big_2xxSingle * Big (Double_Uns (Hi (T1)))
                                          + Big (Double_Uns (S3)));
+         Lemma_Add_Commutation (Double_Uns (Lo (T2)), Hi (T1));
+         pragma Assert
+           (By (Big (Double_Uns (Q)) * Big (Zu) =
+              Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T2)))
+                            + Big_2xxSingle * Big (T3)
+                                            + Big (Double_Uns (S3)),
+              Big_2xxSingle * Big (Double_Uns (Lo (T2)))
+            + Big_2xxSingle * Big (Double_Uns (Hi (T1)))
+            = Big_2xxSingle * Big (T3)));
          pragma Assert (Double_Uns (Hi (T3)) + Hi (T2) = Double_Uns (S1));
          Lemma_Add_Commutation (Double_Uns (Hi (T3)), Hi (T2));
          pragma Assert
            (Big (Double_Uns (Hi (T3))) + Big (Double_Uns (Hi (T2))) =
               Big (Double_Uns (S1)));
-         pragma Assert
-           (Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-            + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T3)))
-            = Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (S1)));
+         Lemma_Mult_Distribution (Big_2xxSingle * Big_2xxSingle,
+                                  Big (Double_Uns (Hi (T3))),
+                                  Big (Double_Uns (Hi (T2))));
       end Prove_Multiplication;
+
+      -------------------------------------
+      -- Prove_Mult_Decomposition_Split3 --
+      -------------------------------------
+
+      procedure Prove_Mult_Decomposition_Split3
+        (D1, D2, D3, D3_Hi, D3_Lo, D4 : Big_Integer)
+      is null;
 
       -----------------------------
       -- Prove_Negative_Dividend --
@@ -2329,6 +2409,22 @@ is
          end if;
       end Prove_Rounding_Case;
 
+      -----------------------------------------------
+      -- Prove_Scaled_Mult_Decomposition_Regroup24 --
+      -----------------------------------------------
+
+      procedure Prove_Scaled_Mult_Decomposition_Regroup24
+        (D1, D2, D3, D4 : Big_Integer)
+      is null;
+
+      ----------------------------------------------
+      -- Prove_Scaled_Mult_Decomposition_Regroup3 --
+      ----------------------------------------------
+
+      procedure Prove_Scaled_Mult_Decomposition_Regroup3
+        (D1, D2, D3, D4 : Single_Uns)
+      is null;
+
       ------------------
       -- Prove_Sign_R --
       ------------------
@@ -2357,6 +2453,7 @@ is
          Lemma_Div_Definition (T1, Zlo, T1 / Zlo, T1 rem Zlo);
          pragma Assert (Double_Uns (Lo (T1 rem Zlo)) = T1 rem Zlo);
          Lemma_Hi_Lo (T2, Lo (T1 rem Zlo), D (4));
+         pragma Assert (T1 rem Zlo < Double_Uns (Zlo));
          pragma Assert (T1 rem Zlo + Double_Uns'(1) <= Double_Uns (Zlo));
          Lemma_Ge_Commutation (Double_Uns (Zlo), T1 rem Zlo + Double_Uns'(1));
          Lemma_Add_Commutation (T1 rem Zlo, 1);
@@ -2365,6 +2462,9 @@ is
          pragma Assert
            (Mult = Big (Double_Uns (Zlo)) *
               (Big_2xxSingle * Big (T1 / Zlo) + Big (T2 / Zlo)) + Big (Ru));
+         pragma Assert (Big_2xxSingle * Big (Double_Uns (D (2)))
+                                      + Big (Double_Uns (D (3)))
+                        < Big_2xxSingle * (Big (Double_Uns (D (2))) + 1));
          Lemma_Div_Lt (Big (T1), Big_2xxSingle, Big (Double_Uns (Zlo)));
          Lemma_Div_Commutation (T1, Double_Uns (Zlo));
          Lemma_Lo_Is_Ident (T1 / Zlo);
@@ -2408,58 +2508,25 @@ is
       Lemma_Abs_Commutation (X);
       Lemma_Abs_Commutation (Y);
       Lemma_Mult_Decomposition (Mult, Xu, Yu, Xhi, Xlo, Yhi, Ylo);
-      pragma Assert
-        (Is_Mult_Decomposition
-           (D1 => 0,
-            D2 => Big (Double_Uns'(Xhi * Yhi)),
-            D3 => Big (Double_Uns'(Xhi * Ylo)) + Big (Double_Uns'(Xlo * Yhi)),
-            D4 => Big (Double_Uns'(Xlo * Ylo))));
 
       T1 := Xlo * Ylo;
       D (4) := Lo (T1);
       D (3) := Hi (T1);
 
       Lemma_Hi_Lo (T1, D (3), D (4));
-      pragma Assert
-        (Is_Mult_Decomposition
-           (D1 => 0,
-            D2 => Big (Double_Uns'(Xhi * Yhi)),
-            D3 => Big (Double_Uns'(Xhi * Ylo)) + Big (Double_Uns'(Xlo * Yhi))
-              + Big (Double_Uns (D (3))),
-            D4 => Big (Double_Uns (D (4)))));
 
       if Yhi /= 0 then
          T1 := Xlo * Yhi;
 
          Lemma_Hi_Lo (T1, Hi (T1), Lo (T1));
-         pragma Assert
-           (Is_Mult_Decomposition
-              (D1 => 0,
-               D2 => Big (Double_Uns'(Xhi * Yhi)) + Big (Double_Uns (Hi (T1))),
-               D3 => Big (Double_Uns'(Xhi * Ylo)) + Big (Double_Uns (Lo (T1)))
-                 + Big (Double_Uns (D (3))),
-               D4 => Big (Double_Uns (D (4)))));
 
          T2 := D (3) + Lo (T1);
 
          Lemma_Add_Commutation (Double_Uns (Lo (T1)), D (3));
-         pragma Assert
-           (Is_Mult_Decomposition
-              (D1 => 0,
-               D2 => Big (Double_Uns'(Xhi * Yhi)) + Big (Double_Uns (Hi (T1))),
-               D3 => Big (Double_Uns'(Xhi * Ylo)) + Big (T2),
-               D4 => Big (Double_Uns (D (4)))));
          Lemma_Mult_Distribution (Big_2xxSingle,
                                   Big (Double_Uns (D (3))),
                                   Big (Double_Uns (Lo (T1))));
          Lemma_Hi_Lo (T2, Hi (T2), Lo (T2));
-         pragma Assert
-           (Is_Mult_Decomposition
-              (D1 => 0,
-               D2 => Big (Double_Uns'(Xhi * Yhi)) + Big (Double_Uns (Hi (T1)))
-                 + Big (Double_Uns (Hi (T2))),
-               D3 => Big (Double_Uns'(Xhi * Ylo)) + Big (Double_Uns (Lo (T2))),
-               D4 => Big (Double_Uns (D (4)))));
 
          D (3) := Lo (T2);
          D (2) := Hi (T1) + Hi (T2);
@@ -2469,131 +2536,41 @@ is
          pragma Assert
            (Big (Double_Uns (Hi (T1))) + Big (Double_Uns (Hi (T2))) =
               Big (Double_Uns (D (2))));
-         pragma Assert
-           (Is_Mult_Decomposition
-              (D1 => 0,
-               D2 => Big (Double_Uns'(Xhi * Yhi)) + Big (Double_Uns (D (2))),
-               D3 => Big (Double_Uns'(Xhi * Ylo)) + Big (Double_Uns (D (3))),
-               D4 => Big (Double_Uns (D (4)))));
 
          if Xhi /= 0 then
             T1 := Xhi * Ylo;
 
             Lemma_Hi_Lo (T1, Hi (T1), Lo (T1));
-            pragma Assert
-              (By (Is_Mult_Decomposition
-                 (D1 => 0,
-                  D2 => Big (Double_Uns'(Xhi * Yhi)) + Big (Double_Uns (D (2)))
-                    + Big (Double_Uns (Hi (T1))),
-                  D3 => Big (Double_Uns (Lo (T1))) + Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))),
-               (By (Big_2xxSingle * Big (T1) =
-                    Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T1)))
-                    + Big_2xxSingle * Big (Double_Uns (Lo (T1))),
-                    Big_2xxSingle * Big (T1) =
-                    Big_2xxSingle * (Big_2xxSingle * Big (Double_Uns (Hi (T1)))
-                    + Big (Double_Uns (Lo (T1))))))));
 
             T2 := D (3) + Lo (T1);
 
             Lemma_Add_Commutation (Double_Uns (D (3)), Lo (T1));
-            pragma Assert
-              (Is_Mult_Decomposition
-                 (D1 => 0,
-                  D2 => Big (Double_Uns'(Xhi * Yhi)) + Big (Double_Uns (D (2)))
-                    + Big (Double_Uns (Hi (T1))),
-                  D3 => Big (T2),
-                  D4 => Big (Double_Uns (D (4)))));
             Lemma_Hi_Lo (T2, Hi (T2), Lo (T2));
-            pragma Assert
-              (By (Is_Mult_Decomposition
-                 (D1 => 0,
-                  D2 => Big (Double_Uns'(Xhi * Yhi)) + Big (Double_Uns (D (2)))
-                    + Big (Double_Uns (Hi (T1))) + Big (Double_Uns (Hi (T2))),
-                  D3 => Big (Double_Uns (Lo (T2))),
-                  D4 => Big (Double_Uns (D (4)))),
-               By (Big_2xxSingle * Big (T2) =
-                 Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-                 + Big_2xxSingle * Big (Double_Uns (Lo (T2))),
-               Big_2xxSingle *
-                 (Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-                                + Big (Double_Uns (Lo (T2))))
-              = Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-                  + Big_2xxSingle * Big (Double_Uns (Lo (T2))))));
+            Prove_Mult_Decomposition_Split3
+              (D1    => 0,
+               D2    => Big (Double_Uns'(Xhi * Yhi)) + Big (Double_Uns (D (2)))
+                 + Big (Double_Uns (Hi (T1))),
+               D3    => Big (T2),
+               D3_Hi => Big (Double_Uns (Hi (T2))),
+               D3_Lo => Big (Double_Uns (Lo (T2))),
+               D4    => Big (Double_Uns (D (4))));
 
             D (3) := Lo (T2);
             T3 := D (2) + Hi (T1);
 
             Lemma_Add_Commutation (Double_Uns (D (2)), Hi (T1));
-            pragma Assert
-              (Is_Mult_Decomposition
-                 (D1 => 0,
-                  D2 => Big (Double_Uns'(Xhi * Yhi)) + Big (T3)
-                    + Big (Double_Uns (Hi (T2))),
-                  D3 => Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))));
             Lemma_Add_Commutation (T3, Hi (T2));
 
             T3 := T3 + Hi (T2);
             T2 := Double_Uns'(Xhi * Yhi);
 
-            pragma Assert
-              (Is_Mult_Decomposition
-                 (D1 => 0,
-                  D2 => Big (T2) + Big (T3),
-                  D3 => Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))));
             Lemma_Hi_Lo (T2, Hi (T2), Lo (T2));
-            pragma Assert
-              (By (Is_Mult_Decomposition
-                 (D1 => Big (Double_Uns (Hi (T2))),
-                  D2 => Big (Double_Uns (Lo (T2))) + Big (T3),
-                  D3 => Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))),
-               By (Big_2xxSingle * Big_2xxSingle * Big (T2) =
-                   Big_2xxSingle * Big_2xxSingle * Big_2xxSingle
-                 * Big (Double_Uns (Hi (T2)))
-                 + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Lo (T2))),
-               Big_2xxSingle * Big_2xxSingle *
-                 (Big_2xxSingle * Big (Double_Uns (Hi (T2)))
-                                + Big (Double_Uns (Lo (T2))))
-                 = Big_2xxSingle * Big_2xxSingle * Big_2xxSingle
-                     * Big (Double_Uns (Hi (T2)))
-                   + Big_2xxSingle * Big_2xxSingle
-                     * Big (Double_Uns (Lo (T2))))));
 
             T1 := T3 + Lo (T2);
             D (2) := Lo (T1);
 
             Lemma_Add_Commutation (T3, Lo (T2));
-            pragma Assert
-              (Is_Mult_Decomposition
-                 (D1 => Big (Double_Uns (Hi (T2))),
-                  D2 => Big (T1),
-                  D3 => Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))));
             Lemma_Hi_Lo (T1, Hi (T1), Lo (T1));
-            pragma Assert
-              (By (Is_Mult_Decomposition
-                (D1 => Big (Double_Uns (Hi (T2))) + Big (Double_Uns (Hi (T1))),
-                 D2 => Big (Double_Uns (D (2))),
-                 D3 => Big (Double_Uns (D (3))),
-                 D4 => Big (Double_Uns (D (4)))),
-               By (Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Lo (T1))) =
-                   Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (2))),
-                   D (2) = Lo (T1))
-                 and then
-               By (Big_2xxSingle * Big_2xxSingle * Big (T1) =
-                   Big_2xxSingle * Big_2xxSingle * Big_2xxSingle
-                 * Big (Double_Uns (Hi (T1)))
-                 + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Lo (T1))),
-               Big_2xxSingle * Big_2xxSingle *
-                 (Big_2xxSingle * Big (Double_Uns (Hi (T1)))
-                                + Big (Double_Uns (Lo (T1))))
-                 = Big_2xxSingle * Big_2xxSingle * Big_2xxSingle
-                     * Big (Double_Uns (Hi (T1)))
-                   + Big_2xxSingle * Big_2xxSingle
-                     * Big (Double_Uns (Lo (T1))))));
 
             D (1) := Hi (T2) + Hi (T1);
 
@@ -2603,75 +2580,42 @@ is
             pragma Assert
               (Big (Double_Uns (Hi (T2))) + Big (Double_Uns (Hi (T1))) =
                    Big (Double_Uns (D (1))));
-
             pragma Assert
-              (By (Is_Mult_Decomposition
-                 (D1 => Big (Double_Uns (D (1))),
-                  D2 => Big (Double_Uns (D (2))),
-                  D3 => Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))),
-               Big_2xxSingle * Big_2xxSingle * Big_2xxSingle *
-                 Big (Double_Uns (D (1)))
-               = Big_2xxSingle * Big_2xxSingle * Big_2xxSingle *
-                 (Big (Double_Uns (Hi (T2)) + Double_Uns (Hi (T1))))));
+              (Is_Mult_Decomposition (D1 => Big (Double_Uns (D (1))),
+                                      D2 => Big (Double_Uns (D (2))),
+                                      D3 => Big (Double_Uns (D (3))),
+                                      D4 => Big (Double_Uns (D (4)))));
          else
             D (1) := 0;
 
             pragma Assert
-              (By (Is_Mult_Decomposition
-                 (D1 => Big (Double_Uns (D (1))),
-                  D2 => Big (Double_Uns (D (2))),
-                  D3 => Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))),
-               Big (Double_Uns'(Xhi * Yhi)) = 0
-                 and then Big (Double_Uns'(Xhi * Ylo)) = 0
-                 and then Big (Double_Uns (D (1))) = 0));
+              (Is_Mult_Decomposition (D1 => Big (Double_Uns (D (1))),
+                                      D2 => Big (Double_Uns (D (2))),
+                                      D3 => Big (Double_Uns (D (3))),
+                                      D4 => Big (Double_Uns (D (4)))));
          end if;
 
-         pragma Assert
-           (Is_Mult_Decomposition (D1 => Big (Double_Uns (D (1))),
-                                   D2 => Big (Double_Uns (D (2))),
-                                   D3 => Big (Double_Uns (D (3))),
-                                   D4 => Big (Double_Uns (D (4)))));
       else
-         pragma Assert
-           (By (Is_Mult_Decomposition
-              (D1 => 0,
-               D2 => 0,
-               D3 => Big (Double_Uns'(Xhi * Ylo)) + Big (Double_Uns (D (3))),
-               D4 => Big (Double_Uns (D (4)))),
-            Big (Double_Uns'(Xhi * Yhi)) = 0
-              and then Big (Double_Uns'(Xlo * Yhi)) = 0));
-
          if Xhi /= 0 then
             T1 := Xhi * Ylo;
 
             Lemma_Hi_Lo (T1, Hi (T1), Lo (T1));
             pragma Assert
-              (By (Is_Mult_Decomposition
+              (Is_Mult_Decomposition
                  (D1 => 0,
                   D2 => Big (Double_Uns (Hi (T1))),
                   D3 => Big (Double_Uns (Lo (T1))) + Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))),
-               Big_2xxSingle * Big (Double_Uns'(Xhi * Ylo)) =
-                 Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (Hi (T1)))
-                   + Big_2xxSingle * Big (Double_Uns (Lo (T1)))));
+                  D4 => Big (Double_Uns (D (4)))));
 
             T2 := D (3) + Lo (T1);
 
             Lemma_Add_Commutation (Double_Uns (Lo (T1)), D (3));
             pragma Assert
-              (By (Is_Mult_Decomposition
+              (Is_Mult_Decomposition
                  (D1 => 0,
                   D2 => Big (Double_Uns (Hi (T1))),
                   D3 => Big (T2),
-                  D4 => Big (Double_Uns (D (4)))),
-               Big_2xxSingle * Big (T2) =
-                 Big_2xxSingle *
-                   (Big (Double_Uns (Lo (T1))) + Big (Double_Uns (D (3))))));
-            Lemma_Mult_Distribution (Big_2xxSingle,
-                                     Big (Double_Uns (D (3))),
-                                     Big (Double_Uns (Lo (T1))));
+                  D4 => Big (Double_Uns (D (4)))));
             Lemma_Hi_Lo (T2, Hi (T2), Lo (T2));
 
             D (3) := Lo (T2);
@@ -2693,22 +2637,42 @@ is
             D (2) := 0;
 
             pragma Assert
-              (By (Is_Mult_Decomposition
+              (Is_Mult_Decomposition
                  (D1 => 0,
                   D2 => Big (Double_Uns (D (2))),
                   D3 => Big (Double_Uns (D (3))),
-                  D4 => Big (Double_Uns (D (4)))),
-               Big (Double_Uns'(Xhi * Ylo)) = 0
-                 and then Big (Double_Uns (D (2))) = 0));
+                  D4 => Big (Double_Uns (D (4)))));
          end if;
 
          D (1) := 0;
       end if;
 
-      pragma Assert (Is_Mult_Decomposition (D1 => Big (Double_Uns (D (1))),
-                                            D2 => Big (Double_Uns (D (2))),
-                                            D3 => Big (Double_Uns (D (3))),
-                                            D4 => Big (Double_Uns (D (4)))));
+      pragma Assert_And_Cut
+        --  Restate the precondition
+        (Z /= 0
+         and then In_Double_Int_Range
+           (if Round then Round_Quotient (Big (X) * Big (Y), Big (Z),
+                                          Big (X) * Big (Y) / Big (Z),
+                                          Big (X) * Big (Y) rem Big (Z))
+            else Big (X) * Big (Y) / Big (Z))
+         --  Restate the value of local variables
+         and then Zu = abs Z
+         and then Zhi = Hi (Zu)
+         and then Zlo = Lo (Zu)
+         and then Mult = abs (Big (X) * Big (Y))
+         and then Quot = Big (X) * Big (Y) / Big (Z)
+         and then Big_R = Big (X) * Big (Y) rem Big (Z)
+         and then
+           (if Round then
+              Big_Q = Round_Quotient (Big (X) * Big (Y), Big (Z), Quot, Big_R)
+            else
+              Big_Q = Quot)
+         --  Summarize first part of the procedure
+         and then D'Initialized
+         and then Is_Mult_Decomposition (D1 => Big (Double_Uns (D (1))),
+                                         D2 => Big (Double_Uns (D (2))),
+                                         D3 => Big (Double_Uns (D (3))),
+                                         D4 => Big (Double_Uns (D (4)))));
 
       --  Now it is time for the dreaded multiple precision division. First an
       --  easy case, check for the simple case of a one digit divisor.
@@ -2716,11 +2680,20 @@ is
       if Zhi = 0 then
          if D (1) /= 0 or else D (2) >= Zlo then
             if D (1) > 0 then
-               pragma Assert
-                 (Mult >= Big_2xxSingle * Big_2xxSingle * Big_2xxSingle
-                          * Big (Double_Uns (D (1))));
+               Lemma_Double_Big_2xxSingle;
+               Lemma_Mult_Positive (Big_2xxDouble, Big_2xxSingle);
+               Lemma_Ge_Mult (Big (Double_Uns (D (1))),
+                              1,
+                              Big_2xxDouble * Big_2xxSingle,
+                              Big_2xxDouble * Big_2xxSingle);
+               Lemma_Mult_Positive (Big_2xxSingle, Big (Double_Uns (D (1))));
+               Lemma_Ge_Mult (Big_2xxSingle * Big_2xxSingle, Big_2xxDouble,
+                              Big_2xxSingle * Big (Double_Uns (D (1))),
+                              Big_2xxDouble * Big_2xxSingle);
                pragma Assert (Mult >= Big_2xxDouble * Big_2xxSingle);
                Lemma_Ge_Commutation (2 ** Single_Size, Zu);
+               Lemma_Ge_Mult (Big_2xxSingle, Big (Zu), Big_2xxDouble,
+                              Big_2xxDouble * Big (Zu));
                pragma Assert (Mult >= Big_2xxDouble * Big (Zu));
             else
                Lemma_Ge_Commutation (Double_Uns (D (2)), Zu);
@@ -2747,6 +2720,8 @@ is
       elsif (D (1) & D (2)) >= Zu then
          Lemma_Hi_Lo (D (1) & D (2), D (1), D (2));
          Lemma_Ge_Commutation (D (1) & D (2), Zu);
+         pragma Assert
+           (Mult >= Big_2xxSingle * Big_2xxSingle * Big (D (1) & D (2)));
          Prove_Overflow;
          Raise_Error;
 
@@ -2760,8 +2735,10 @@ is
          --  First normalize the divisor so that it has the leading bit on.
          --  We do this by finding the appropriate left shift amount.
 
+         Lemma_Hi_Lo (D (1) & D (2), D (1), D (2));
          Lemma_Lt_Commutation (D (1) & D (2), Zu);
-         pragma Assert (Mult < Big_2xxDouble * Big (Zu));
+         pragma Assert
+           (Mult < Big_2xxDouble * Big (Zu));
 
          Shift := Single_Size;
          Mask  := Single_Uns'Last;
@@ -2799,6 +2776,13 @@ is
                  Post => Shift / 2 = 2 ** (Log_Single_Size - (Inter + 1))
                    and then (Shift = 2 or (Shift / 2) mod 2 = 0);
 
+               procedure Prove_Prev_And_Mask (Prev, Mask : Single_Uns)
+               with
+                 Ghost,
+                 Pre  => Prev /= 0
+                   and then (Prev and Mask) = 0,
+                 Post => (Prev and not Mask) /= 0;
+
                procedure Prove_Shift_Progress
                with
                  Ghost,
@@ -2830,6 +2814,7 @@ is
                -- Local lemma null bodies --
                -----------------------------
 
+               procedure Prove_Prev_And_Mask (Prev, Mask : Single_Uns) is null;
                procedure Prove_Power is null;
                procedure Prove_Shifting is null;
                procedure Prove_Shift_Progress is null;
@@ -2853,6 +2838,15 @@ is
                if (Hi (Zu) and Mask) = 0 then
                   Zu := Shift_Left (Zu, Shift);
 
+                  pragma Assert ((Hi (Zu_Prev) and Mask_Prev) /= 0);
+                  pragma Assert
+                    (By ((Hi (Zu_Prev) and Mask_Prev and Mask) = 0,
+                     (Hi (Zu_Prev) and Mask) = 0
+                     and then
+                     (Hi (Zu_Prev) and Mask_Prev and Mask)
+                     = (Hi (Zu_Prev) and Mask and Mask_Prev)
+                    ));
+                  Prove_Prev_And_Mask (Hi (Zu_Prev) and Mask_Prev, Mask);
                   Prove_Shifting;
                   pragma Assert (Big (Zu_Prev) =
                     Big (Double_Uns'(abs Z)) * Big_2xx (Scale));
@@ -2898,6 +2892,7 @@ is
          --  not change the invariant that (D (1) & D (2)) < Zu.
 
          Lemma_Lt_Commutation (D (1) & D (2), abs Z);
+         Lemma_Big_Of_Double_Uns (Zu);
          Lemma_Lt_Mult (Big (D (1) & D (2)),
                         Big (Double_Uns'(abs Z)), Big_2xx (Scale),
                         Big_2xxDouble);
@@ -2919,82 +2914,21 @@ is
             * Big (Double_Uns (Hi (T1)))
             = Big_2xxSingle * Big_2xxSingle * Big_2xxSingle
             * Big (Double_Uns (D (1))));
-
-         pragma Assert
-           (Is_Scaled_Mult_Decomposition
-              (Big (Double_Uns (D (1))),
-               Big (Double_Uns (D (2))),
-               Big (Double_Uns (D (3))),
-               Big (Double_Uns (D (4)))));
-         pragma Assert
-           (By (Is_Scaled_Mult_Decomposition
-              (0,
-               0,
-               Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (1)))
-                             + Big_2xxSingle * Big (Double_Uns (D (2)))
-                                             + Big (Double_Uns (D (3))),
-               Big (Double_Uns (D (4)))),
-            Big_2xxSingle *
-              (Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (1)))
-                             + Big_2xxSingle * Big (Double_Uns (D (2)))
-                                             + Big (Double_Uns (D (3))))
-            + Big (Double_Uns (D (4))) =
-              Big_2xxSingle *
-              Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (1)))
-            + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (2)))
-                            + Big_2xxSingle * Big (Double_Uns (D (3)))
-                                            + Big (Double_Uns (D (4)))
-              and then
-            (By (Mult * Big_2xx (Scale) =
-              Big_2xxSingle *
-              Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (1)))
-            + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (2)))
-                            + Big_2xxSingle * Big (Double_Uns (D (3)))
-                                            + Big (Double_Uns (D (4))),
-             Is_Scaled_Mult_Decomposition
-              (Big (Double_Uns (D (1))),
-               Big (Double_Uns (D (2))),
-               Big (Double_Uns (D (3))),
-               Big (Double_Uns (D (4))))))));
-         Lemma_Substitution
-           (Mult * Big_2xx (Scale), Big_2xxSingle,
-            Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (1)))
-                          + Big_2xxSingle * Big (Double_Uns (D (2)))
-                                          + Big (Double_Uns (D (3))),
-            Big3 (D (1), D (2), D (3)),
-            Big (Double_Uns (D (4))));
          Lemma_Substitution (Big_2xxDouble * Big (Zu), Big_2xxDouble, Big (Zu),
                              Big (Double_Uns'(abs Z)) * Big_2xx (Scale), 0);
          Lemma_Lt_Mult (Mult, Big_2xxDouble * Big (Double_Uns'(abs Z)),
                         Big_2xx (Scale), Big_2xxDouble * Big (Zu));
+         pragma Assert (Mult >= Big_0);
+         pragma Assert (Big_2xx (Scale) >= Big_0);
+         Lemma_Mult_Non_Negative (Mult, Big_2xx (Scale));
          Lemma_Div_Lt (Mult * Big_2xx (Scale), Big (Zu), Big_2xxDouble);
          Lemma_Concat_Definition (D (1), D (2));
          Lemma_Double_Big_2xxSingle;
-         pragma Assert
-           (Big_2xxSingle *
-              (Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (1)))
-                             + Big_2xxSingle * Big (Double_Uns (D (2)))
-                                             + Big (Double_Uns (D (3))))
-            + Big (Double_Uns (D (4)))
-            = Big_2xxSingle * Big_2xxSingle *
-              (Big_2xxSingle * Big (Double_Uns (D (1)))
-                             + Big (Double_Uns (D (2))))
-            + Big_2xxSingle * Big (Double_Uns (D (3)))
-                            + Big (Double_Uns (D (4))));
-         pragma Assert
-           (By (Is_Scaled_Mult_Decomposition
-              (0,
-               Big_2xxSingle * Big (Double_Uns (D (1)))
-                             + Big (Double_Uns (D (2))),
-               0,
-               Big_2xxSingle * Big (Double_Uns (D (3)))
-                             + Big (Double_Uns (D (4)))),
-            Big_2xxSingle * Big_2xxSingle *
-              (Big_2xxSingle * Big (Double_Uns (D (1)))
-                             + Big (Double_Uns (D (2)))) =
-            Big_2xxSingle *
-              Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (1)))
-            + Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (2)))));
+         Prove_Scaled_Mult_Decomposition_Regroup24
+           (Big (Double_Uns (D (1))),
+            Big (Double_Uns (D (2))),
+            Big (Double_Uns (D (3))),
+            Big (Double_Uns (D (4))));
          Lemma_Substitution
            (Mult * Big_2xx (Scale), Big_2xxSingle * Big_2xxSingle,
               Big_2xxSingle * Big (Double_Uns (D (1)))
@@ -3002,7 +2936,8 @@ is
               Big (D (1) & D (2)),
               Big_2xxSingle * Big (Double_Uns (D (3)))
                             + Big (Double_Uns (D (4))));
-         pragma Assert (Big (D (1) & D (2)) < Big (Zu));
+         pragma Assert
+           (Big (D (1) & D (2)) < Big (Zu));
 
          --  Loop to compute quotient digits, runs twice for Qd (1) and Qd (2)
 
@@ -3027,10 +2962,19 @@ is
             --  Local ghost variables
 
             Qd1  : Single_Uns := 0 with Ghost;
+            D234 : Big_Integer with Ghost;
             D123 : constant Big_Integer := Big3 (D (1), D (2), D (3))
+              with Ghost;
+            D4   : constant Big_Integer := Big (Double_Uns (D (4)))
               with Ghost;
 
          begin
+            Prove_Scaled_Mult_Decomposition_Regroup3
+              (D (1), D (2), D (3), D (4));
+            pragma Assert
+              (By (Mult * Big_2xx (Scale) = Big_2xxSingle * D123 + D4,
+               Is_Scaled_Mult_Decomposition (0, 0, D123, D4)));
+
             for J in 1 .. 2 loop
                Lemma_Hi_Lo (D (J) & D (J + 1), D (J), D (J + 1));
                pragma Assert (Big (D (J) & D (J + 1)) < Big (Zu));
@@ -3050,6 +2994,7 @@ is
                   Qd (J) := Single_Uns'Last;
 
                   Lemma_Concat_Definition (D (J), D (J + 1));
+                  Lemma_Big_Of_Double_Uns_Of_Single_Uns (D (J + 2));
                   pragma Assert (Big_2xxSingle > Big (Double_Uns (D (J + 2))));
                   pragma Assert (Big3 (D (J), D (J + 1), 0) + Big_2xxSingle
                                  > Big3 (D (J), D (J + 1), D (J + 2)));
@@ -3070,6 +3015,8 @@ is
                   Lemma_Div_Lt
                     (Big3 (D (J), D (J + 1), D (J + 2)),
                      Big_2xxSingle, Big (Zu));
+                  pragma Assert (Big (Double_Uns (Qd (J))) >=
+                    Big3 (D (J), D (J + 1), D (J + 2)) / Big (Zu));
 
                else
                   Qd (J) := Lo ((D (J) & D (J + 1)) / Zhi);
@@ -3077,6 +3024,7 @@ is
                   Prove_Qd_Calculation_Part_1 (J);
                end if;
 
+               pragma Assert (for all K in 1 .. J => Qd (K)'Initialized);
                Lemma_Gt_Mult
                  (Big (Double_Uns (Qd (J))),
                   Big3 (D (J), D (J + 1), D (J + 2)) / Big (Zu),
@@ -3111,7 +3059,9 @@ is
                Lemma_Hi_Lo_3 (Zu, Zhi, Zlo);
 
                while not Le3 (S1, S2, S3, D (J), D (J + 1), D (J + 2)) loop
-                  pragma Loop_Invariant (Qd (J)'Initialized);
+                  pragma Loop_Invariant
+                    (for all K in 1 .. J => Qd (K)'Initialized);
+                  pragma Loop_Invariant (if J = 2 then Qd (1) = Qd1);
                   pragma Loop_Invariant
                     (Big3 (S1, S2, S3) = Big (Double_Uns (Qd (J))) * Big (Zu));
                   pragma Loop_Invariant
@@ -3152,6 +3102,7 @@ is
 
                --  Now subtract S1&S2&S3 from D1&D2&D3 ready for next step
 
+               pragma Assert (for all K in 1 .. J => Qd (K)'Initialized);
                pragma Assert
                  (Big3 (S1, S2, S3) = Big (Double_Uns (Qd (J))) * Big (Zu));
                pragma Assert (Big3 (S1, S2, S3) >
@@ -3168,19 +3119,15 @@ is
                       * Big_2xxSingle * Big (Double_Uns (D (J)))
                       + Big_2xxSingle * Big (Double_Uns (D (J + 1)))
                                       + Big (Double_Uns (D (J + 2))));
-                  pragma Assert (Big3 (D (J), D (J + 1), D (J + 2)) =
-                    Big_2xxDouble * Big (Double_Uns (D (J)))
-                  + Big_2xxSingle * Big (Double_Uns (D (J + 1)))
-                                  + Big (Double_Uns (D (J + 2))));
                   pragma Assert (Big_2xxSingle >= 0);
+                  Lemma_Big_Of_Double_Uns_Of_Single_Uns (D (J + 1));
                   pragma Assert (Big (Double_Uns (D (J + 1))) >= 0);
+                  Lemma_Mult_Non_Negative
+                    (Big_2xxSingle, Big (Double_Uns (D (J + 1))));
                   pragma Assert
-                    (Big_2xxSingle * Big (Double_Uns (D (J + 1))) >= 0);
-                  pragma Assert
-                    (Big_2xxSingle * Big (Double_Uns (D (J + 1)))
-                                   + Big (Double_Uns (D (J + 2))) >= 0);
-                  pragma Assert (Big3 (D (J), D (J + 1), D (J + 2)) >=
-                                   Big_2xxDouble * Big (Double_Uns (D (J))));
+                    (Big3 (D (J), D (J + 1), D (J + 2)) >=
+                       Big_2xxSingle * Big_2xxSingle
+                       * Big (Double_Uns (D (J))));
                   Lemma_Ge_Commutation (Double_Uns (D (J)), Double_Uns'(1));
                   Lemma_Ge_Mult (Big (Double_Uns (D (J))),
                                  Big (Double_Uns'(1)),
@@ -3195,6 +3142,8 @@ is
 
                if J = 1 then
                   Qd1 := Qd (1);
+                  D234 := Big3 (D (2), D (3), D (4));
+                  pragma Assert (D4 = Big (Double_Uns (D (4))));
                   Lemma_Substitution
                     (Mult * Big_2xx (Scale), Big_2xxSingle, D123,
                      Big3 (D (1), D (2), D (3)) + Big3 (S1, S2, S3),
@@ -3203,17 +3152,9 @@ is
                   Lemma_Substitution (Mult * Big_2xx (Scale), Big_2xxSingle,
                                       Big3 (S1, S2, S3),
                                       Big (Double_Uns (Qd1)) * Big (Zu),
-                                      Big3 (D (2), D (3), D (4)));
+                                      D234);
                else
                   pragma Assert (Qd1 = Qd (1));
-                  pragma Assert
-                    (Big_2xxSingle * Big_2xxSingle * Big (Double_Uns (D (2)))
-                     = 0);
-                  pragma Assert
-                    (Mult * Big_2xx (Scale) =
-                       Big_2xxSingle * Big (Double_Uns (Qd (1))) * Big (Zu)
-                     + Big3 (S1, S2, S3)
-                     + Big3 (D (2), D (3), D (4)));
                   pragma Assert
                     (Mult * Big_2xx (Scale) =
                        Big_2xxSingle * Big (Double_Uns (Qd (1))) * Big (Zu)
@@ -3231,6 +3172,7 @@ is
          --  We rescale the divisor as well, to make the proper comparison
          --  for rounding below.
 
+         pragma Assert (for all K in 1 .. 2 => Qd (K)'Initialized);
          Qu := Qd (1) & Qd (2);
          Ru := D (3) & D (4);
 
@@ -3352,14 +3294,14 @@ is
         Ghost,
         Pre  => X2 < Y2,
         Post => Big3 (X1, X2 - Y2, X3)
-              = Big3 (X1, X2, X3) + Big3 (1, 0, 0) - Big3 (0, Y2, 0);
+          = Big3 (X1, X2, X3) + Big3 (Single_Uns'(1), 0, 0) - Big3 (0, Y2, 0);
 
       procedure Lemma_Sub3_With_Carry3 (X1, X2, X3, Y3 : Single_Uns)
       with
         Ghost,
         Pre  => X3 < Y3,
         Post => Big3 (X1, X2, X3 - Y3)
-              = Big3 (X1, X2, X3) + Big3 (0, 1, 0) - Big3 (0, 0, Y3);
+          = Big3 (X1, X2, X3) + Big3 (Single_Uns'(0), 1, 0) - Big3 (0, 0, Y3);
 
       -------------------------
       -- Lemma_Add3_No_Carry --
@@ -3370,12 +3312,6 @@ is
          Lemma_Add_Commutation (Double_Uns (X1), Y1);
          Lemma_Add_Commutation (Double_Uns (X2), Y2);
          Lemma_Add_Commutation (Double_Uns (X3), Y3);
-         pragma Assert (Double_Uns (Single_Uns'(X1 + Y1))
-                        = Double_Uns (X1) + Double_Uns (Y1));
-         pragma Assert (Double_Uns (Single_Uns'(X2 + Y2))
-                        = Double_Uns (X2) + Double_Uns (Y2));
-         pragma Assert (Double_Uns (Single_Uns'(X3 + Y3))
-                        = Double_Uns (X3) + Double_Uns (Y3));
       end Lemma_Add3_No_Carry;
 
       ---------------------
@@ -3434,10 +3370,12 @@ is
             X1 := X1 - 1;
 
             pragma Assert
-              (Big3 (X1, X2, X3) = Big3 (XX1, XX2, XX3) - Big3 (1, 0, 0));
+              (Big3 (X1, X2, X3) =
+                 Big3 (XX1, XX2, XX3) - Big3 (Single_Uns'(1), 0, 0));
             pragma Assert
               (Big3 (X1, X2, X3) = Big3 (XX1, XX2, XX3)
-               - Big3 (0, Single_Uns'Last, 0) - Big3 (0, 1, 0));
+               - Big3 (Single_Uns'(0), Single_Uns'Last, 0)
+               - Big3 (Single_Uns'(0), 1, 0));
             Lemma_Add3_No_Carry (X1, X2, X3, 0, Single_Uns'Last, 0);
          else
             Lemma_Sub3_No_Carry (X1, X2, X3, 0, 1, 0);
@@ -3446,7 +3384,8 @@ is
          X2 := X2 - 1;
 
          pragma Assert
-           (Big3 (X1, X2, X3) = Big3 (XX1, XX2, XX3) - Big3 (0, 1, 0));
+           (Big3 (X1, X2, X3) =
+              Big3 (XX1, XX2, XX3) - Big3 (Single_Uns'(0), 1, 0));
          Lemma_Sub3_With_Carry3 (X1, X2, X3, Y3);
       else
          Lemma_Sub3_No_Carry (X1, X2, X3, 0, 0, Y3);
@@ -3465,7 +3404,7 @@ is
 
          pragma Assert
            (Big3 (X1, X2, X3) = Big3 (XX1, XX2, XX3)
-            - Big3 (0, 0, Y3) - Big3 (1, 0, 0));
+            - Big3 (0, 0, Y3) - Big3 (Single_Uns'(1), 0, 0));
          Lemma_Sub3_With_Carry2 (X1, X2, X3, Y2);
       else
          Lemma_Sub3_No_Carry (X1, X2, X3, 0, Y2, 0);

@@ -1,5 +1,5 @@
 /* Output Dwarf2 format symbol table information from GCC.
-   Copyright (C) 1992-2022 Free Software Foundation, Inc.
+   Copyright (C) 1992-2023 Free Software Foundation, Inc.
    Contributed by Gary Funck (gary@intrepid.com).
    Derived from DWARF 1 implementation of Ron Guilmette (rfg@monkeys.com).
    Extensively modified by Jason Merrill (jason@cygnus.com).
@@ -3865,7 +3865,7 @@ static int decl_quals (const_tree);
 static dw_die_ref modified_type_die (tree, int, bool, dw_die_ref);
 static dw_die_ref generic_parameter_die (tree, tree, bool, dw_die_ref);
 static dw_die_ref template_parameter_pack_die (tree, tree, dw_die_ref);
-static unsigned int dbx_reg_number (const_rtx);
+static unsigned int debugger_reg_number (const_rtx);
 static void add_loc_descr_op_piece (dw_loc_descr_ref *, int);
 static dw_loc_descr_ref reg_loc_descriptor (rtx, enum var_init_status);
 static dw_loc_descr_ref one_reg_loc_descriptor (unsigned int,
@@ -5600,6 +5600,17 @@ is_fortran (const_tree decl)
   return is_fortran ();
 }
 
+/* Return TRUE if the language is Rust.
+   Note, returns FALSE for dwarf_version < 5 && dwarf_strict. */
+
+static inline bool
+is_rust ()
+{
+  unsigned int lang = get_AT_unsigned (comp_unit_die (), DW_AT_language);
+
+  return lang == DW_LANG_Rust;
+}
+
 /* Return TRUE if the language is Ada.  */
 
 static inline bool
@@ -5883,6 +5894,7 @@ lookup_type_die (tree type)
   if (die && die->removed)
     {
       TYPE_SYMTAB_DIE (type) = NULL;
+      TREE_ASM_WRITTEN (type) = 0;
       return NULL;
     }
   return die;
@@ -12916,7 +12928,7 @@ output_one_line_info_table (dw_line_info_table *table)
   char line_label[MAX_ARTIFICIAL_LABEL_BYTES];
   unsigned int current_line = 1;
   bool current_is_stmt = DWARF_LINE_DEFAULT_IS_STMT_START;
-  dw_line_info_entry *ent, *prev_addr;
+  dw_line_info_entry *ent, *prev_addr = NULL;
   size_t i;
   unsigned int view;
 
@@ -13210,6 +13222,7 @@ base_type_die (tree type, bool reverse)
 	{
 	  const char *name = IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (type)));
 	  if (strcmp (name, "char16_t") == 0
+	      || strcmp (name, "char8_t") == 0
 	      || strcmp (name, "char32_t") == 0)
 	    {
 	      encoding = DW_ATE_UTF;
@@ -13231,7 +13244,11 @@ base_type_die (tree type, bool reverse)
 	}
       if (TYPE_STRING_FLAG (type))
 	{
-	  if (TYPE_UNSIGNED (type))
+	  if ((dwarf_version >= 4 || !dwarf_strict)
+	      && is_rust ()
+	      && int_size_in_bytes (type) == 4)
+	    encoding = DW_ATE_UTF;
+	  else if (TYPE_UNSIGNED (type))
 	    encoding = DW_ATE_unsigned_char;
 	  else
 	    encoding = DW_ATE_signed_char;
@@ -13270,7 +13287,7 @@ base_type_die (tree type, bool reverse)
       /* Dwarf2 doesn't know anything about complex ints, so use
 	 a user defined type for it.  */
     case COMPLEX_TYPE:
-      if (TREE_CODE (TREE_TYPE (type)) == REAL_TYPE)
+      if (SCALAR_FLOAT_TYPE_P (TREE_TYPE (type)))
 	encoding = DW_ATE_complex_float;
       else
 	encoding = DW_ATE_lo_user;
@@ -14201,10 +14218,10 @@ template_parameter_pack_die (tree parm_pack,
   return die;
 }
 
-/* Return the DBX register number described by a given RTL node.  */
+/* Return the debugger register number described by a given RTL node.  */
 
 static unsigned int
-dbx_reg_number (const_rtx rtl)
+debugger_reg_number (const_rtx rtl)
 {
   unsigned regno = REGNO (rtl);
 
@@ -14219,7 +14236,7 @@ dbx_reg_number (const_rtx rtl)
     }
 #endif
 
-  regno = DBX_REGISTER_NUMBER (regno);
+  regno = DEBUGGER_REGNO (regno);
   gcc_assert (regno != INVALID_REGNUM);
   return regno;
 }
@@ -14282,10 +14299,10 @@ reg_loc_descriptor (rtx rtl, enum var_init_status initialized)
     return multiple_reg_loc_descriptor (rtl, regs, initialized);
   else
     {
-      unsigned int dbx_regnum = dbx_reg_number (rtl);
-      if (dbx_regnum == IGNORED_DWARF_REGNUM)
+      unsigned int debugger_regnum = debugger_reg_number (rtl);
+      if (debugger_regnum == IGNORED_DWARF_REGNUM)
 	return 0;
-      return one_reg_loc_descriptor (dbx_regnum, initialized);
+      return one_reg_loc_descriptor (debugger_regnum, initialized);
     }
 }
 
@@ -14334,7 +14351,7 @@ multiple_reg_loc_descriptor (rtx rtl, rtx regs,
 	}
 #endif
 
-      gcc_assert ((unsigned) DBX_REGISTER_NUMBER (reg) == dbx_reg_number (rtl));
+      gcc_assert ((unsigned) DEBUGGER_REGNO (reg) == debugger_reg_number (rtl));
       nregs = REG_NREGS (rtl);
 
       /* At present we only track constant-sized pieces.  */
@@ -14347,7 +14364,7 @@ multiple_reg_loc_descriptor (rtx rtl, rtx regs,
 	{
 	  dw_loc_descr_ref t;
 
-	  t = one_reg_loc_descriptor (DBX_REGISTER_NUMBER (reg),
+	  t = one_reg_loc_descriptor (DEBUGGER_REGNO (reg),
 				      VAR_INIT_STATUS_INITIALIZED);
 	  add_loc_descr (&loc_result, t);
 	  add_loc_descr_op_piece (&loc_result, size);
@@ -14369,7 +14386,7 @@ multiple_reg_loc_descriptor (rtx rtl, rtx regs,
     {
       dw_loc_descr_ref t;
 
-      t = one_reg_loc_descriptor (dbx_reg_number (XVECEXP (regs, 0, i)),
+      t = one_reg_loc_descriptor (debugger_reg_number (XVECEXP (regs, 0, i)),
 				  VAR_INIT_STATUS_INITIALIZED);
       add_loc_descr (&loc_result, t);
       add_loc_descr_op_piece (&loc_result, size);
@@ -16027,7 +16044,7 @@ mem_loc_descriptor (rtx rtl, machine_mode mode,
 	      ))
 	{
 	  dw_die_ref type_die;
-	  unsigned int dbx_regnum;
+	  unsigned int debugger_regnum;
 
 	  if (dwarf_strict && dwarf_version < 5)
 	    break;
@@ -16037,11 +16054,11 @@ mem_loc_descriptor (rtx rtl, machine_mode mode,
 	  if (type_die == NULL)
 	    break;
 
-	  dbx_regnum = dbx_reg_number (rtl);
-	  if (dbx_regnum == IGNORED_DWARF_REGNUM)
+	  debugger_regnum = debugger_reg_number (rtl);
+	  if (debugger_regnum == IGNORED_DWARF_REGNUM)
 	    break;
 	  mem_loc_result = new_loc_descr (dwarf_OP (DW_OP_regval_type),
-					  dbx_regnum, 0);
+					  debugger_regnum, 0);
 	  mem_loc_result->dw_loc_oprnd2.val_class = dw_val_class_die_ref;
 	  mem_loc_result->dw_loc_oprnd2.v.val_die_ref.die = type_die;
 	  mem_loc_result->dw_loc_oprnd2.v.val_die_ref.external = 0;
@@ -16312,10 +16329,10 @@ mem_loc_descriptor (rtx rtl, machine_mode mode,
 				      VOIDmode, VAR_INIT_STATUS_INITIALIZED);
 	  else
 	    {
-              unsigned int dbx_regnum = dbx_reg_number (ENTRY_VALUE_EXP (rtl));
-	      if (dbx_regnum == IGNORED_DWARF_REGNUM)
+	      unsigned int debugger_regnum = debugger_reg_number (ENTRY_VALUE_EXP (rtl));
+	      if (debugger_regnum == IGNORED_DWARF_REGNUM)
 		return NULL;
-	      op0 = one_reg_loc_descriptor (dbx_regnum,
+	      op0 = one_reg_loc_descriptor (debugger_regnum,
 					    VAR_INIT_STATUS_INITIALIZED);
 	    }
 	}
@@ -17062,7 +17079,7 @@ implicit_ptr_descriptor (rtx rtl, HOST_WIDE_INT offset)
 
   if (dwarf_strict && dwarf_version < 5)
     return NULL;
-  gcc_assert (TREE_CODE (DEBUG_IMPLICIT_PTR_DECL (rtl)) == VAR_DECL
+  gcc_assert (VAR_P (DEBUG_IMPLICIT_PTR_DECL (rtl))
 	      || TREE_CODE (DEBUG_IMPLICIT_PTR_DECL (rtl)) == PARM_DECL
 	      || TREE_CODE (DEBUG_IMPLICIT_PTR_DECL (rtl)) == RESULT_DECL);
   ref = lookup_decl_die (DEBUG_IMPLICIT_PTR_DECL (rtl));
@@ -22482,7 +22499,7 @@ gen_array_type_die (tree type, dw_die_ref context_die)
 	  size = int_size_in_bytes (TREE_TYPE (szdecl));
 	  if (!DECL_P (szdecl))
 	    {
-	      if (TREE_CODE (szdecl) == INDIRECT_REF
+	      if (INDIRECT_REF_P (szdecl)
 		  && DECL_P (TREE_OPERAND (szdecl, 0)))
 		{
 		  rszdecl = TREE_OPERAND (szdecl, 0);
@@ -22516,7 +22533,7 @@ gen_array_type_die (tree type, dw_die_ref context_die)
   add_name_attribute (array_die, type_tag (type));
   equate_type_number_to_die (type, array_die);
 
-  if (TREE_CODE (type) == VECTOR_TYPE)
+  if (VECTOR_TYPE_P (type))
     add_AT_flag (array_die, DW_AT_GNU_vector, 1);
 
   /* For Fortran multidimensional arrays use DW_ORD_col_major ordering.  */
@@ -22537,13 +22554,16 @@ gen_array_type_die (tree type, dw_die_ref context_die)
   add_AT_unsigned (array_die, DW_AT_ordering, DW_ORD_row_major);
 #endif
 
-  if (TREE_CODE (type) == VECTOR_TYPE)
+  if (VECTOR_TYPE_P (type))
     {
-      /* For VECTOR_TYPEs we use an array die with appropriate bounds.  */
+      /* For VECTOR_TYPEs we use an array DIE with appropriate bounds.  */
       dw_die_ref subrange_die = new_die (DW_TAG_subrange_type, array_die, NULL);
-      add_bound_info (subrange_die, DW_AT_lower_bound, size_zero_node, NULL);
+      int lb = lower_bound_default ();
+      if (lb == -1)
+	lb = 0;
+      add_bound_info (subrange_die, DW_AT_lower_bound, size_int (lb), NULL);
       add_bound_info (subrange_die, DW_AT_upper_bound,
-		      size_int (TYPE_VECTOR_SUBPARTS (type) - 1), NULL);
+		      size_int (lb + TYPE_VECTOR_SUBPARTS (type) - 1), NULL);
     }
   else
     add_subscript_info (array_die, type, collapse_nested_arrays);
@@ -24779,7 +24799,8 @@ add_call_src_coords_attributes (tree stmt, dw_die_ref die)
   if (RESERVED_LOCATION_P (BLOCK_SOURCE_LOCATION (stmt)))
     return;
 
-  expanded_location s = expand_location (BLOCK_SOURCE_LOCATION (stmt));
+  location_t locus = BLOCK_SOURCE_LOCATION (stmt);
+  expanded_location s = expand_location (locus);
 
   if (dwarf_version >= 3 || !dwarf_strict)
     {
@@ -24787,6 +24808,9 @@ add_call_src_coords_attributes (tree stmt, dw_die_ref die)
       add_AT_unsigned (die, DW_AT_call_line, s.line);
       if (debug_column_info && s.column)
 	add_AT_unsigned (die, DW_AT_call_column, s.column);
+      unsigned discr = get_discriminator_from_loc (locus);
+	if (discr != 0)
+	  add_AT_unsigned (die, DW_AT_GNU_discriminator, discr);
     }
 }
 
@@ -25198,6 +25222,8 @@ gen_compile_unit_die (const char *filename)
     }
   else if (strcmp (language_string, "GNU F77") == 0)
     language = DW_LANG_Fortran77;
+  else if (strcmp (language_string, "GNU Modula-2") == 0)
+    language = DW_LANG_Modula2;
   else if (dwarf_version >= 3 || !dwarf_strict)
     {
       if (strcmp (language_string, "GNU Ada") == 0)
@@ -25223,6 +25249,8 @@ gen_compile_unit_die (const char *filename)
 	{
 	  if (strcmp (language_string, "GNU Go") == 0)
 	    language = DW_LANG_Go;
+	  else if (strcmp (language_string, "GNU Rust") == 0)
+	    language = DW_LANG_Rust;
 	}
     }
   /* Use a degraded Fortran setting in strict DWARF2 so is_fortran works.  */
@@ -26210,8 +26238,7 @@ gen_type_die_with_usage (tree type, dw_die_ref context_die,
      now.  (Vectors and arrays are special because the debugging info is in the
      cloned type itself.  Similarly function/method types can contain extra
      ref-qualification).  */
-  if (TREE_CODE (type) == FUNCTION_TYPE
-      || TREE_CODE (type) == METHOD_TYPE)
+  if (FUNC_OR_METHOD_TYPE_P (type))
     {
       /* For function/method types, can't use type_main_variant here,
 	 because that can have different ref-qualifiers for C++,
@@ -26506,7 +26533,8 @@ process_scope_var (tree stmt, tree decl, tree origin, dw_die_ref context_die)
 
   if (die != NULL && die->die_parent == NULL)
     add_child_die (context_die, die);
-  else if (TREE_CODE (decl_or_origin) == IMPORTED_DECL)
+
+  if (TREE_CODE (decl_or_origin) == IMPORTED_DECL)
     {
       if (early_dwarf)
 	dwarf2out_imported_module_or_decl_1 (decl_or_origin, DECL_NAME (decl_or_origin),
@@ -27255,7 +27283,10 @@ dwarf2out_late_global_decl (tree decl)
       /* We may have to generate full debug late for LTO in case debug
          was not enabled at compile-time or the target doesn't support
 	 the LTO early debug scheme.  */
-      if (! die && in_lto_p)
+      if (! die && in_lto_p
+	  /* Function scope variables are emitted when emitting the
+	     DIE for the function.  */
+	  && ! local_function_static (decl))
 	dwarf2out_decl (decl);
       else if (die)
 	{
@@ -30945,7 +30976,7 @@ optimize_location_into_implicit_ptr (dw_die_ref die, tree decl)
     return;
   if ((TREE_CODE (TREE_OPERAND (init, 0)) == STRING_CST
        && !TREE_ASM_WRITTEN (TREE_OPERAND (init, 0)))
-      || (TREE_CODE (TREE_OPERAND (init, 0)) == VAR_DECL
+      || (VAR_P (TREE_OPERAND (init, 0))
 	  && !DECL_EXTERNAL (TREE_OPERAND (init, 0))
 	  && TREE_OPERAND (init, 0) != decl))
     {

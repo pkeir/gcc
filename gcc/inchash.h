@@ -1,5 +1,5 @@
 /* An incremental hash abstract data type.
-   Copyright (C) 2014-2022 Free Software Foundation, Inc.
+   Copyright (C) 2014-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -87,6 +87,8 @@ class hash
     for (unsigned i = 0; i < x.get_len (); i++)
       add_hwi (x.sext_elt (i));
   }
+
+  void add_real_value (const class real_value &v);
 
   /* Hash in pointer PTR.  */
   void add_ptr (const void *ptr)

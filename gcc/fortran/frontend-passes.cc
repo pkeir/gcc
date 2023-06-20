@@ -1,5 +1,5 @@
 /* Pass manager for Fortran front end.
-   Copyright (C) 2010-2022 Free Software Foundation, Inc.
+   Copyright (C) 2010-2023 Free Software Foundation, Inc.
    Contributed by Thomas König.
 
 This file is part of GCC.
@@ -424,9 +424,9 @@ copy_walk_reduction_arg (gfc_constructor *c, gfc_expr *fn)
   return fcn;
 }
 
-/* Callback function for optimzation of reductions to scalars.  Transform ANY
+/* Callback function for optimization of reductions to scalars.  Transform ANY
    ([f1,f2,f3, ...]) to f1 .or. f2 .or. f3 .or. ..., with ANY, SUM and PRODUCT
-   correspondingly.  Handly only the simple cases without MASK and DIM.  */
+   correspondingly.  Handle only the simple cases without MASK and DIM.  */
 
 static int
 callback_reduction (gfc_expr **e, int *walk_subtrees ATTRIBUTE_UNUSED,
@@ -1455,7 +1455,7 @@ simplify_io_impl_do (gfc_code **code, int *walk_subtrees,
 }
 
 /* Optimize a namespace, including all contained namespaces.
-  flag_frontend_optimize and flag_fronend_loop_interchange are
+  flag_frontend_optimize and flag_frontend_loop_interchange are
   handled separately.  */
 
 static void
@@ -2883,7 +2883,10 @@ do_subscript (gfc_expr **e)
 		have_do_end = false;
 
 	      if (!have_do_start && !have_do_end)
-		return 0;
+		{
+		  mpz_clear (do_step);
+		  return 0;
+		}
 
 	      /* No warning inside a zero-trip loop.  */
 	      if (have_do_start && have_do_end)
@@ -2892,7 +2895,12 @@ do_subscript (gfc_expr **e)
 
 		  cmp = mpz_cmp (do_end, do_start);
 		  if ((sgn > 0 && cmp < 0) || (sgn < 0 && cmp > 0))
-		    break;
+		    {
+		      mpz_clear (do_start);
+		      mpz_clear (do_end);
+		      mpz_clear (do_step);
+		      break;
+		    }
 		}
 
 	      /* May have to correct the end value if the step does not equal
@@ -2965,6 +2973,12 @@ do_subscript (gfc_expr **e)
 		      mpz_clear (val);
 		    }
 		}
+
+	      if (have_do_start)
+		mpz_clear (do_start);
+	      if (have_do_end)
+		mpz_clear (do_end);
+	      mpz_clear (do_step);
 	    }
 	}
     }
@@ -3038,7 +3052,8 @@ do_intent (gfc_expr **e)
 	  do_sym = dl->ext.iterator->var->symtree->n.sym;
 
 	  if (a->expr && a->expr->symtree
-	      && a->expr->symtree->n.sym == do_sym)
+	      && a->expr->symtree->n.sym == do_sym
+	      && f->sym)
 	    {
 	      if (f->sym->attr.intent == INTENT_OUT)
 		gfc_error_now ("Variable %qs at %L set to undefined value "

@@ -1,6 +1,6 @@
 // class template regex -*- C++ -*-
 
-// Copyright (C) 2010-2022 Free Software Foundation, Inc.
+// Copyright (C) 2010-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -27,6 +27,10 @@
  *  This is an internal header file, included by other library headers.
  *  Do not attempt to use it directly. @headername{regex}
  */
+
+#if __cplusplus >= 202002L
+# include <bits/iterator_concepts.h>	// std::default_sentinel_t
+#endif
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -1002,6 +1006,16 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       { return this->_M_str().compare({__s, __n}); }
       /// @endcond
 
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 3204. sub_match::swap only swaps the base class
+      /// Swap the values of two sub_match objects.
+      void
+      swap(sub_match& __s) noexcept(__is_nothrow_swappable<_BiIter>::value)
+      {
+	this->pair<_BiIter, _BiIter>::swap(__s);
+	std::swap(matched, __s.matched);
+      }
+
     private:
       // Simplified basic_string_view for C++11
       struct __string_view
@@ -1821,6 +1835,16 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        * @brief Destroys a %match_results object.
        */
       ~match_results() = default;
+
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 2195. Missing constructors for match_results
+
+      match_results(const match_results& __m, const _Alloc& __a)
+      : _Base_type(__m, __a) { }
+
+      match_results(match_results&& __m, const _Alloc& __a)
+      noexcept(noexcept(_Base_type(std::move(__m), __a)))
+      : _Base_type(std::move(__m), __a) { }
 
       ///@}
 
@@ -2760,12 +2784,21 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       bool
       operator==(const regex_iterator&) const noexcept;
 
+#if __cplusplus >= 202002L
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 3719. Directory iterators should be usable with default sentinel
+      bool operator==(default_sentinel_t) const noexcept
+      { return _M_pregex == nullptr; }
+#endif
+
+#if __cpp_impl_three_way_comparison < 201907L
       /**
        * @brief Tests the inequivalence of two regex iterators.
        */
       bool
       operator!=(const regex_iterator& __rhs) const noexcept
       { return !(*this == __rhs); }
+#endif
 
       /**
        * @brief Dereferences a %regex_iterator.
@@ -2968,12 +3001,21 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       bool
       operator==(const regex_token_iterator& __rhs) const;
 
+#if __cplusplus >= 202002L
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 3719. Directory iterators should be usable with default sentinel
+      bool operator==(default_sentinel_t) const noexcept
+      { return _M_end_of_seq(); }
+#endif
+
+#if __cpp_impl_three_way_comparison < 201907L
       /**
        * @brief Compares a %regex_token_iterator to another for inequality.
        */
       bool
       operator!=(const regex_token_iterator& __rhs) const
       { return !(*this == __rhs); }
+#endif
 
       /**
        * @brief Dereferences a %regex_token_iterator.
@@ -3022,7 +3064,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       }
 
       constexpr bool
-      _M_end_of_seq() const
+      _M_end_of_seq() const noexcept
       { return _M_result == nullptr; }
 
       // [28.12.2.2.4]

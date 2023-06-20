@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -728,10 +728,6 @@ package body Sem_Aux is
       CList : Node_Id;
 
    begin
-      if not Is_Type (Typ) then
-         return False;
-      end if;
-
       FSTyp := First_Subtype (Typ);
 
       if not Has_Discriminants (FSTyp) then
@@ -964,7 +960,7 @@ package body Sem_Aux is
    -- Is_Derived_Type --
    ---------------------
 
-   function Is_Derived_Type (Ent : E) return B is
+   function Is_Derived_Type (Ent : Entity_Id) return B is
       Par : Node_Id;
 
    begin
@@ -1130,10 +1126,8 @@ package body Sem_Aux is
 
          else
             declare
-               C : E;
-
+               C : Entity_Id := First_Component (Btype);
             begin
-               C := First_Component (Btype);
                while Present (C) loop
                   if Is_Limited_Type (Etype (C)) then
                      return True;

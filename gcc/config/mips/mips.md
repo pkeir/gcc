@@ -1,5 +1,5 @@
 ;;  Mips.md	     Machine Description for MIPS based processors
-;;  Copyright (C) 1989-2022 Free Software Foundation, Inc.
+;;  Copyright (C) 1989-2023 Free Software Foundation, Inc.
 ;;  Contributed by   A. Lichnewsky, lich@inria.inria.fr
 ;;  Changes by       Michael Meissner, meissner@osf.org
 ;;  64-bit r4000 support by Ian Lance Taylor, ian@cygnus.com, and
@@ -159,6 +159,9 @@
 
   ;; The `.insn' pseudo-op.
   UNSPEC_INSN_PSEUDO
+  UNSPEC_JRHB
+
+  VUNSPEC_SPECULATION_BARRIER
 ])
 
 (define_constants
@@ -3162,6 +3165,15 @@
 	(clz:GPR (match_operand:GPR 1 "register_operand" "d")))]
   "ISA_HAS_CLZ_CLO"
   "<d>clz\t%0,%1"
+  [(set_attr "type" "clz")
+   (set_attr "mode" "<MODE>")])
+
+
+(define_insn "*clo<mode>2"
+  [(set (match_operand:GPR 0 "register_operand" "=d")
+	(clz:GPR (not:GPR (match_operand:GPR 1 "register_operand" "d"))))]
+  "ISA_HAS_CLZ_CLO"
+  "<d>clo\t%0,%1"
   [(set_attr "type" "clz")
    (set_attr "mode" "<MODE>")])
 
@@ -6670,6 +6682,20 @@
   [(set_attr "type"	"jump")
    (set_attr "mode"	"none")])
 
+;; Insn to clear execution and instruction hazards while returning.
+;; However, it doesn't clear hazards created by the insn in its delay slot.
+;; Thus, explicitly place a nop in its delay slot.
+
+(define_insn "mips_hb_return_internal"
+  [(return)
+   (unspec_volatile [(match_operand 0 "pmode_register_operand" "")]
+		    UNSPEC_JRHB)]
+  ""
+  {
+    return "%(jr.hb\t$31%/%)";
+  }
+  [(set_attr "insn_count" "2")])
+
 ;; Normal return.
 
 (define_insn "<optab>_internal"
@@ -7431,6 +7457,16 @@
   mips_expand_conditional_move (operands);
   DONE;
 })
+
+(define_expand "speculation_barrier"
+  [(unspec_volatile [(const_int 0)] VUNSPEC_SPECULATION_BARRIER)]
+  ""
+  "
+  mips_emit_speculation_barrier_function ();
+  DONE;
+  "
+)
+
 
 ;;
 ;;  ....................

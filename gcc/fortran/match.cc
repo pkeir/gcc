@@ -1,5 +1,5 @@
 /* Matching subroutines in all sizes, shapes and colors.
-   Copyright (C) 2000-2022 Free Software Foundation, Inc.
+   Copyright (C) 2000-2023 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -193,7 +193,7 @@ gfc_match_member_sep(gfc_symbol *sym)
   if (gfc_match_name (name) != MATCH_YES)
     {
       gfc_error ("Expected structure component or operator name "
-                 "after '.' at %C");
+		 "after %<.%> at %C");
       goto error;
     }
 
@@ -454,10 +454,11 @@ gfc_match_eos (void)
 /* Match a literal integer on the input, setting the value on
    MATCH_YES.  Literal ints occur in kind-parameters as well as
    old-style character length specifications.  If cnt is non-NULL it
-   will be set to the number of digits.  */
+   will be set to the number of digits.
+   When gobble_ws is false, do not skip over leading blanks.  */
 
 match
-gfc_match_small_literal_int (int *value, int *cnt)
+gfc_match_small_literal_int (int *value, int *cnt, bool gobble_ws)
 {
   locus old_loc;
   char c;
@@ -466,7 +467,8 @@ gfc_match_small_literal_int (int *value, int *cnt)
   old_loc = gfc_current_locus;
 
   *value = -1;
-  gfc_gobble_whitespace ();
+  if (gobble_ws)
+    gfc_gobble_whitespace ();
   c = gfc_next_ascii_char ();
   if (cnt)
     *cnt = 0;
@@ -608,17 +610,19 @@ gfc_match_label (void)
 /* See if the current input looks like a name of some sort.  Modifies
    the passed buffer which must be GFC_MAX_SYMBOL_LEN+1 bytes long.
    Note that options.cc restricts max_identifier_length to not more
-   than GFC_MAX_SYMBOL_LEN.  */
+   than GFC_MAX_SYMBOL_LEN.
+   When gobble_ws is false, do not skip over leading blanks.  */
 
 match
-gfc_match_name (char *buffer)
+gfc_match_name (char *buffer, bool gobble_ws)
 {
   locus old_loc;
   int i;
   char c;
 
   old_loc = gfc_current_locus;
-  gfc_gobble_whitespace ();
+  if (gobble_ws)
+    gfc_gobble_whitespace ();
 
   c = gfc_next_ascii_char ();
   if (!(ISALPHA (c) || (c == '_' && flag_allow_leading_underscore)))
@@ -1053,15 +1057,17 @@ cleanup:
 
 
 /* Tries to match the next non-whitespace character on the input.
-   This subroutine does not return MATCH_ERROR.  */
+   This subroutine does not return MATCH_ERROR.
+   When gobble_ws is false, do not skip over leading blanks.  */
 
 match
-gfc_match_char (char c)
+gfc_match_char (char c, bool gobble_ws)
 {
   locus where;
 
   where = gfc_current_locus;
-  gfc_gobble_whitespace ();
+  if (gobble_ws)
+    gfc_gobble_whitespace ();
 
   if (gfc_next_ascii_char () == c)
     return MATCH_YES;
@@ -1078,7 +1084,8 @@ gfc_match_char (char c)
 
    %%  Literal percent sign
    %e  Expression, pointer to a pointer is set
-   %s  Symbol, pointer to the symbol is set
+   %s  Symbol, pointer to the symbol is set (host_assoc = 0)
+   %S  Symbol, pointer to the symbol is set (host_assoc = 1)
    %n  Name, character buffer is set to name
    %t  Matches end of statement.
    %o  Matches an intrinsic operator, returned as an INTRINSIC enum.
@@ -1145,8 +1152,9 @@ loop:
 	  goto loop;
 
 	case 's':
+	case 'S':
 	  vp = va_arg (argp, void **);
-	  n = gfc_match_symbol ((gfc_symbol **) vp, 0);
+	  n = gfc_match_symbol ((gfc_symbol **) vp, c == 'S');
 	  if (n != MATCH_YES)
 	    {
 	      m = n;
@@ -5339,6 +5347,16 @@ gfc_match_common (void)
 		goto cleanup;
 	    }
 
+	  /* F2018:R874:  common-block-object is variable-name [ (array-spec) ]
+	     F2018:C8121: A variable-name shall not be a name made accessible
+	     by use association.  */
+	  if (sym->attr.use_assoc)
+	    {
+	      gfc_error ("Symbol %qs at %C is USE associated from module %qs "
+			 "and cannot occur in COMMON", sym->name, sym->module);
+	      goto cleanup;
+	    }
+
 	  /* Deal with an optional array specification after the
 	     symbol name.  */
 	  m = gfc_match_array_spec (&as, true, true);
@@ -5518,15 +5536,20 @@ gfc_free_namelist (gfc_namelist *name)
 /* Free an OpenMP namelist structure.  */
 
 void
-gfc_free_omp_namelist (gfc_omp_namelist *name, bool free_ns)
+gfc_free_omp_namelist (gfc_omp_namelist *name, bool free_ns,
+		       bool free_align_allocator)
 {
   gfc_omp_namelist *n;
 
   for (; name; name = n)
     {
       gfc_free_expr (name->expr);
+      if (free_align_allocator)
+	gfc_free_expr (name->u.align);
       if (free_ns)
 	gfc_free_namespace (name->u2.ns);
+      else if (free_align_allocator)
+	gfc_free_expr (name->u2.allocator);
       else if (name->u2.udr)
 	{
 	  if (name->u2.udr->combiner)
@@ -5718,7 +5741,7 @@ gfc_match_equivalence (void)
 
   /* EQUIVALENCE has been matched.  After gobbling any possible whitespace,
      the next character needs to be '('.  Check that here, and return
-     MATCH_NO for a variable of the form equivalencej.  */
+     MATCH_NO for a variable of the form equivalence.  */
   gfc_gobble_whitespace ();
   c = gfc_peek_ascii_char ();
   if (c != '(')
@@ -5907,6 +5930,30 @@ recursive_stmt_fcn (gfc_expr *e, gfc_symbol *sym)
 }
 
 
+/* Check for invalid uses of statement function dummy arguments in body.  */
+
+static bool
+chk_stmt_fcn_body (gfc_expr *e, gfc_symbol *sym, int *f ATTRIBUTE_UNUSED)
+{
+  gfc_formal_arglist *formal;
+
+  if (e == NULL || e->symtree == NULL || e->expr_type != EXPR_FUNCTION)
+    return false;
+
+  for (formal = sym->formal; formal; formal = formal->next)
+    {
+      if (formal->sym == e->symtree->n.sym)
+	{
+	  gfc_error ("Invalid use of statement function argument at %L",
+		     &e->where);
+	  return true;
+	}
+    }
+
+  return false;
+}
+
+
 /* Match a statement function declaration.  It is so easy to match
    non-statement function statements with a MATCH_ERROR as opposed to
    MATCH_NO that we suppress error message in most cases.  */
@@ -5974,6 +6021,9 @@ gfc_match_st_function (void)
 		 sym->name, &expr->where);
       return MATCH_ERROR;
     }
+
+  if (gfc_traverse_expr (expr, sym, chk_stmt_fcn_body, 0))
+    return MATCH_ERROR;
 
   sym->value = expr;
 

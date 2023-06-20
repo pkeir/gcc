@@ -1,5 +1,5 @@
 /* Subroutines for insn-output.cc for Renesas H8/300.
-   Copyright (C) 1992-2022 Free Software Foundation, Inc.
+   Copyright (C) 1992-2023 Free Software Foundation, Inc.
    Contributed by Steve Chamberlain (sac@cygnus.com),
    Jim Wilson (wilson@cygnus.com), and Doug Evans (dje@cygnus.com).
 
@@ -1140,7 +1140,7 @@ static int
 h8300_register_move_cost (machine_mode mode ATTRIBUTE_UNUSED,
                          reg_class_t from, reg_class_t to)
 {
-  if (from == MAC_REGS || to == MAC_REG)
+  if (from == MAC_REGS || to == MAC_REGS)
     return 6;
   else
     return 3;
@@ -5009,7 +5009,7 @@ h8300_encode_section_info (tree decl, rtx rtl, int first)
   if (TREE_CODE (decl) == FUNCTION_DECL
       && h8300_funcvec_function_p (decl))
     extra_flags = SYMBOL_FLAG_FUNCVEC_FUNCTION;
-  else if (TREE_CODE (decl) == VAR_DECL
+  else if (VAR_P (decl)
 	   && (TREE_STATIC (decl) || DECL_EXTERNAL (decl)))
     {
       if (h8300_eightbit_data_p (decl))
@@ -5531,6 +5531,32 @@ h8300_ok_for_sibcall_p (tree fndecl, tree)
 
   return 1;
 }
+
+/* Return TRUE if OP is a PRE_INC or PRE_DEC
+   instruction using REG, FALSE otherwise.  */
+
+bool
+pre_incdec_with_reg (rtx op, unsigned int reg)
+{
+  /* OP must be a MEM.  */
+  if (GET_CODE (op) != MEM)
+    return false;
+
+  /* The address must be a PRE_INC or PRE_DEC.  */
+  op = XEXP (op, 0);
+  if (GET_CODE (op) != PRE_DEC && GET_CODE (op) != PRE_INC)
+    return false;
+
+  /* It must be a register that is being incremented
+     or decremented.  */
+  op = XEXP (op, 0);
+  if (!REG_P (op))
+    return false;
+
+  /* Finally, check that the register number matches.  */
+  return REGNO (op) == reg;
+}
+
 
 /* Initialize the GCC target structure.  */
 #undef TARGET_ATTRIBUTE_TABLE
@@ -5598,9 +5624,6 @@ h8300_ok_for_sibcall_p (tree fndecl, tree)
 
 #undef TARGET_MODES_TIEABLE_P
 #define TARGET_MODES_TIEABLE_P h8300_modes_tieable_p
-
-#undef TARGET_LRA_P
-#define TARGET_LRA_P hook_bool_void_false
 
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P	h8300_legitimate_address_p

@@ -7,7 +7,7 @@
 --                                 S p e c                                  --
 --                        (VxWorks 6.x SMP PPC RTP)                         --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -71,8 +71,8 @@ package System is
    Null_Address : constant Address;
 
    Storage_Unit : constant := 8;
-   Word_Size    : constant := 32;
-   Memory_Size  : constant := 2 ** 32;
+   Word_Size    : constant := Standard'Word_Size;
+   Memory_Size  : constant := 2 ** Word_Size;
 
    --  Address comparison
 
@@ -125,6 +125,8 @@ private
    --  Setup proper set of -L's for this configuration
 
    type Address is mod Memory_Size;
+   for Address'Size use Standard'Address_Size;
+
    Null_Address : constant Address := 0;
 
    --------------------------------------

@@ -1,5 +1,5 @@
 /* Find near-matches for strings.
-   Copyright (C) 2015-2022 Free Software Foundation, Inc.
+   Copyright (C) 2015-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -463,6 +463,15 @@ test_find_closest_string ()
   candidates.safe_push ("DWARF_GNAT_ENCODINGS_MINIMAL");
   ASSERT_STREQ ("DWARF_GNAT_ENCODINGS_ALL",
 		find_closest_string ("DWARF_GNAT_ENCODINGS_all",
+				     &candidates));
+
+  /* Example from PR 105564 where option name with missing equal
+     sign should win.  */
+  candidates.truncate (0);
+  candidates.safe_push ("-Wtrivial-auto-var-init");
+  candidates.safe_push ("-ftrivial-auto-var-init=");
+  ASSERT_STREQ ("-ftrivial-auto-var-init=",
+		find_closest_string ("-ftrivial-auto-var-init",
 				     &candidates));
 }
 

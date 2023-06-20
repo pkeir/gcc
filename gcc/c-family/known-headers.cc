@@ -1,5 +1,5 @@
 /* Support for suggestions about missing #include directives.
-   Copyright (C) 2017-2022 Free Software Foundation, Inc.
+   Copyright (C) 2017-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -199,6 +199,20 @@ get_stdlib_header_for_name (const char *name, enum stdlib lib)
     {"WINT_MAX", {"<stdint.h>", "<cstdint>"} },
     {"WINT_MIN", {"<stdint.h>", "<cstdint>"} },
 
+    /* <time.h>.  */
+    {"asctime", {"<time.h>", "<ctime>"} },
+    {"clock", {"<time.h>", "<ctime>"} },
+    {"clock_t", {"<time.h>", "<ctime>"} },
+    {"ctime", {"<time.h>", "<ctime>"} },
+    {"difftime", {"<time.h>", "<ctime>"} },
+    {"gmtime", {"<time.h>", "<ctime>"} },
+    {"localtime", {"<time.h>", "<ctime>"} },
+    {"mktime", {"<time.h>", "<ctime>"} },
+    {"strftime", {"<time.h>", "<ctime>"} },
+    {"time", {"<time.h>", "<ctime>"} },
+    {"time_t", {"<time.h>", "<ctime>"} },
+    {"tm", {"<time.h>", "<ctime>"} },
+
     /* <wchar.h>.  */
     {"WCHAR_MAX", {"<wchar.h>", "<cwchar>"} },
     {"WCHAR_MIN", {"<wchar.h>", "<cwchar>"} }
@@ -306,6 +320,6 @@ suggest_missing_header::~suggest_missing_header ()
   maybe_add_include_fixit (&richloc, m_header_hint, true);
   inform (&richloc,
 	  "%qs is defined in header %qs;"
-	  " did you forget to %<#include %s%>?",
+	  " this is probably fixable by adding %<#include %s%>",
 	  m_name_str, m_header_hint, m_header_hint);
 }

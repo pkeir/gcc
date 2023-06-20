@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2022 Free Software Foundation, Inc.
+/* Copyright (C) 2016-2023 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -82,11 +82,15 @@ extern unsigned int gcn_local_sym_hash (const char *name);
    configuration.  The name of the attribute also changed.  */
 #define SRAMOPT "msram-ecc=on:-mattr=+sramecc;msram-ecc=off:-mattr=-sramecc"
 
+/* Replace once XNACK is supported:
+   #define XNACKOPT "mxnack=on:-mattr=+xnack;mxnack=off:-mattr=-xnack"  */
+#define XNACKOPT "!mnack=*:-mattr=-xnack;mnack=*:-mattr=-xnack"
+
 /* Use LLVM assembler and linker options.  */
 #define ASM_SPEC  "-triple=amdgcn--amdhsa "  \
 		  "%:last_arg(%{march=*:-mcpu=%*}) " \
 		  "%{!march=*|march=fiji:--amdhsa-code-object-version=3} " \
-		  "%{" NO_XNACK "mxnack:-mattr=+xnack;:-mattr=-xnack} " \
+		  "%{" NO_XNACK XNACKOPT "}" \
 		  "%{" NO_SRAM_ECC SRAMOPT "} " \
 		  "-filetype=obj"
 #define LINK_SPEC "--pie --export-dynamic"
@@ -113,4 +117,4 @@ extern const char *last_arg_spec_function (int argc, const char **argv);
 #define DWARF2_DEBUGGING_INFO      1
 #define DWARF2_ASM_LINE_DEBUG_INFO 1
 #define EH_FRAME_THROUGH_COLLECT2  1
-#define DBX_REGISTER_NUMBER(REGNO) gcn_dwarf_register_number (REGNO)
+#define DEBUGGER_REGNO(REGNO) gcn_dwarf_register_number (REGNO)

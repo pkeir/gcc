@@ -1,5 +1,5 @@
 /* Internals of libgccjit: classes for recording calls made to the JIT API.
-   Copyright (C) 2013-2022 Free Software Foundation, Inc.
+   Copyright (C) 2013-2023 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -405,6 +405,9 @@ public:
   virtual void write_reproducer (reproducer &r) = 0;
   virtual location *dyn_cast_location () { return NULL; }
 
+  memento (const memento&) = delete;
+  memento& operator= (const memento&) = delete;
+
 protected:
   memento (context *ctxt)
   : m_ctxt (ctxt),
@@ -436,12 +439,15 @@ public:
   string (context *ctxt, const char *text, bool escaped);
   ~string ();
 
-  const char *c_str () { return m_buffer; }
+  const char *c_str () const { return m_buffer; }
 
   static string * from_printf (context *ctxt, const char *fmt, ...)
     GNU_PRINTF(2, 3);
 
   void replay_into (replayer *) final override {}
+
+  string (const string&) = delete;
+  string& operator= (const string&) = delete;
 
 private:
   string * make_debug_string () final override;
@@ -799,6 +805,15 @@ public:
   type *get_element_type () { return m_other_type; }
 
   void replay_into (replayer *) final override;
+
+  bool is_same_type_as (type *other) final override
+  {
+    vector_type *other_vec_type = other->dyn_cast_vector_type ();
+    if (other_vec_type == NULL)
+      return false;
+    return get_num_units () == other_vec_type->get_num_units ()
+      && get_element_type () == other_vec_type->get_element_type ();
+  }
 
   vector_type *is_vector () final override { return this; }
 
@@ -1677,7 +1692,23 @@ public:
     m_op (op),
     m_a (a),
     m_b (b)
-  {}
+  {
+    type *a_type = a->get_type ();
+    vector_type *vec_type = a_type->dyn_cast_vector_type ();
+    if (vec_type != NULL)
+    {
+      type *element_type = vec_type->get_element_type ();
+      type *inner_type;
+      /* Vectors of floating-point values return a vector of integers of the
+         same size.  */
+      if (element_type->is_float ())
+	inner_type = ctxt->get_int_type (element_type->get_size (), false);
+      else
+	inner_type = element_type;
+      m_type = new vector_type (inner_type, vec_type->get_num_units ());
+      ctxt->record (m_type);
+    }
+  }
 
   void replay_into (replayer *r) final override;
 
@@ -2525,7 +2556,7 @@ types_kinda_same_internal (recording::type *a,
 
    For array and vector types the number of element also
    has to match, aswell as the element types themself.  */
-static inline bool
+inline bool
 types_kinda_same (recording::type *a, recording::type *b)
 {
   /* Handle trivial case here, to allow for inlining.  */

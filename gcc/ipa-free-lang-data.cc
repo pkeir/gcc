@@ -1,7 +1,7 @@
 /* Pass to free or clear language-specific data structures from
    the IL before they reach the middle end.
 
-   Copyright (C) 1987-2022 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -1173,7 +1173,7 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual unsigned int execute (function *) { return free_lang_data (); }
+  unsigned int execute (function *) final override { return free_lang_data (); }
 
 }; // class pass_ipa_free_lang_data
 

@@ -1,5 +1,5 @@
 /* Read and annotate call graph profile from the auto profile data file.
-   Copyright (C) 2014-2022 Free Software Foundation, Inc.
+   Copyright (C) 2014-2023 Free Software Foundation, Inc.
    Contributed by Dehao Chen (dehao@google.com)
 
 This file is part of GCC.
@@ -363,7 +363,8 @@ get_combined_location (location_t loc, tree decl)
   /* TODO: allow more bits for line and less bits for discriminator.  */
   if (LOCATION_LINE (loc) - DECL_SOURCE_LINE (decl) >= (1<<16))
     warning_at (loc, OPT_Woverflow, "offset exceeds 16 bytes");
-  return ((LOCATION_LINE (loc) - DECL_SOURCE_LINE (decl)) << 16);
+  return ((LOCATION_LINE (loc) - DECL_SOURCE_LINE (decl)) << 16)
+	 | get_discriminator_from_loc (loc);
 }
 
 /* Return the function decl of a given lexical BLOCK.  */
@@ -388,7 +389,6 @@ get_inline_stack (location_t locus, inline_stack *stack)
   tree block = LOCATION_BLOCK (locus);
   if (block && TREE_CODE (block) == BLOCK)
     {
-      int level = 0;
       for (block = BLOCK_SUPERCONTEXT (block);
            block && (TREE_CODE (block) == BLOCK);
            block = BLOCK_SUPERCONTEXT (block))
@@ -401,7 +401,6 @@ get_inline_stack (location_t locus, inline_stack *stack)
           stack->safe_push (
               std::make_pair (decl, get_combined_location (locus, decl)));
           locus = tmp_locus;
-          level++;
         }
     }
   stack->safe_push (
@@ -654,7 +653,7 @@ function_instance::read_function_instance (function_instance_stack *stack,
 
   for (unsigned i = 0; i < num_pos_counts; i++)
     {
-      unsigned offset = gcov_read_unsigned () & 0xffff0000;
+      unsigned offset = gcov_read_unsigned ();
       unsigned num_targets = gcov_read_unsigned ();
       gcov_type count = gcov_read_counter ();
       s->pos_counts[offset].count = count;
@@ -1304,7 +1303,7 @@ afdo_propagate_circuit (const bb_set &annotated_bb)
   {
     gimple *def_stmt;
     tree cmp_rhs, cmp_lhs;
-    gimple *cmp_stmt = last_stmt (bb);
+    gimple *cmp_stmt = last_nondebug_stmt (bb);
     edge e;
     edge_iterator ei;
 
@@ -1590,13 +1589,14 @@ afdo_annotate_cfg (const stmt_set &promoted_stmts)
 
 /* Wrapper function to invoke early inliner.  */
 
-static void
+static unsigned int
 early_inline ()
 {
   compute_fn_summary (cgraph_node::get (current_function_decl), true);
-  unsigned todo = early_inliner (cfun);
+  unsigned int todo = early_inliner (cfun);
   if (todo & TODO_update_ssa_any)
     update_ssa (TODO_update_ssa);
+  return todo;
 }
 
 /* Use AutoFDO profile to annoate the control flow graph.
@@ -1652,20 +1652,22 @@ auto_profile (void)
        function before annotation, so the profile inside bar@loc_foo2
        will be useful.  */
     autofdo::stmt_set promoted_stmts;
+    unsigned int todo = 0;
     for (int i = 0; i < 10; i++)
       {
-        if (!flag_value_profile_transformations
-            || !autofdo::afdo_vpt_for_early_inline (&promoted_stmts))
-          break;
-        early_inline ();
+	if (!flag_value_profile_transformations
+	    || !autofdo::afdo_vpt_for_early_inline (&promoted_stmts))
+	  break;
+	todo |= early_inline ();
       }
 
-    early_inline ();
+    todo |= early_inline ();
     autofdo::afdo_annotate_cfg (promoted_stmts);
     compute_function_frequency ();
 
     /* Local pure-const may imply need to fixup the cfg.  */
-    if (execute_fixup_cfg () & TODO_cleanup_cfg)
+    todo |= execute_fixup_cfg ();
+    if (todo & TODO_cleanup_cfg)
       cleanup_tree_cfg ();
 
     free_dominance_info (CDI_DOMINATORS);
@@ -1675,7 +1677,7 @@ auto_profile (void)
     pop_cfun ();
   }
 
-  return TODO_rebuild_cgraph_edges;
+  return 0;
 }
 } /* namespace autofdo.  */
 
@@ -1752,13 +1754,13 @@ public:
   }
 
   /* opt_pass methods: */
-  virtual bool
-  gate (function *)
+  bool
+  gate (function *) final override
   {
     return flag_auto_profile;
   }
-  virtual unsigned int
-  execute (function *)
+  unsigned int
+  execute (function *) final override
   {
     return autofdo::auto_profile ();
   }

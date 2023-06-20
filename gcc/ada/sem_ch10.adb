@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,6 +31,7 @@ with Einfo;          use Einfo;
 with Einfo.Entities; use Einfo.Entities;
 with Einfo.Utils;    use Einfo.Utils;
 with Errout;         use Errout;
+with Exp_Disp;       use Exp_Disp;
 with Exp_Put_Image;
 with Exp_Util;       use Exp_Util;
 with Elists;         use Elists;
@@ -73,6 +74,7 @@ with Style;          use Style;
 with Stylesw;        use Stylesw;
 with Tbuild;         use Tbuild;
 with Uname;          use Uname;
+with Warnsw;         use Warnsw;
 
 package body Sem_Ch10 is
 
@@ -82,6 +84,14 @@ package body Sem_Ch10 is
 
    procedure Analyze_Context (N : Node_Id);
    --  Analyzes items in the context clause of compilation unit
+
+   procedure Analyze_Required_Limited_With_Units (N : Node_Id);
+   --  Subsidiary of Analyze_Compilation_Unit. Perform full analysis of the
+   --  limited-with units of N when it is a package declaration that does not
+   --  require a package body, and the profile of some subprogram defined in N
+   --  depends on shadow incomplete type entities visible through limited-with
+   --  context clauses. This analysis is required to provide the backend with
+   --  the non-limited view of these shadow entities.
 
    procedure Build_Limited_Views (N : Node_Id);
    --  Build and decorate the list of shadow entities for a package mentioned
@@ -946,16 +956,14 @@ package body Sem_Ch10 is
 
       --  Treat compilation unit pragmas that appear after the library unit
 
-      if Present (Pragmas_After (Aux_Decls_Node (N))) then
-         declare
-            Prag_Node : Node_Id := First (Pragmas_After (Aux_Decls_Node (N)));
-         begin
-            while Present (Prag_Node) loop
-               Analyze (Prag_Node);
-               Next (Prag_Node);
-            end loop;
-         end;
-      end if;
+      declare
+         Prag_Node : Node_Id := First (Pragmas_After (Aux_Decls_Node (N)));
+      begin
+         while Present (Prag_Node) loop
+            Analyze (Prag_Node);
+            Next (Prag_Node);
+         end loop;
+      end;
 
       --  Analyze the contract of a [generic] subprogram that acts as a
       --  compilation unit after all compilation pragmas have been analyzed.
@@ -1000,6 +1008,22 @@ package body Sem_Ch10 is
 
             Add_Stub_Constructs (N);
          end if;
+      end if;
+
+      --  Build dispatch tables of library-level tagged types only now because
+      --  the generation of distribution stubs above may create some of them.
+
+      if Expander_Active and then Tagged_Type_Expansion then
+         case Nkind (Unit_Node) is
+            when N_Package_Declaration | N_Package_Body =>
+               Build_Static_Dispatch_Tables (Unit_Node);
+
+            when N_Package_Instantiation =>
+               Build_Static_Dispatch_Tables (Instance_Spec (Unit_Node));
+
+            when others =>
+               null;
+         end case;
       end if;
 
       --  Remove unit from visibility, so that environment is clean for the
@@ -1374,6 +1398,13 @@ package body Sem_Ch10 is
       --  ensure that the pragma/aspect, if present, has been analyzed.
 
       Check_No_Elab_Code_All (N);
+
+      --  If this is a main compilation containing a package declaration that
+      --  requires no package body, and the profile of some subprogram depends
+      --  on shadow incomplete entities then perform full analysis of its
+      --  limited-with units.
+
+      Analyze_Required_Limited_With_Units (N);
    end Analyze_Compilation_Unit;
 
    ---------------------
@@ -2008,6 +2039,149 @@ package body Sem_Ch10 is
       end if;
    end Analyze_Protected_Body_Stub;
 
+   -----------------------------------------
+   -- Analyze_Required_Limited_With_Units --
+   -----------------------------------------
+
+   procedure Analyze_Required_Limited_With_Units (N : Node_Id) is
+      Unit_Node : constant Node_Id   := Unit (N);
+      Spec_Id   : constant Entity_Id := Defining_Entity (Unit_Node);
+
+      function Depends_On_Limited_Views (Pkg_Id : Entity_Id) return Boolean;
+      --  Determines whether the given package has some subprogram with a
+      --  profile that depends on shadow incomplete type entities of a
+      --  limited-with unit.
+
+      function Has_Limited_With_Clauses return Boolean;
+      --  Determines whether the compilation unit N has limited-with context
+      --  clauses.
+
+      ------------------------------
+      -- Has_Limited_With_Clauses --
+      ------------------------------
+
+      function Has_Limited_With_Clauses return Boolean is
+         Item : Node_Id := First (Context_Items (N));
+
+      begin
+         while Present (Item) loop
+            if Nkind (Item) = N_With_Clause
+              and then Limited_Present (Item)
+              and then not Implicit_With (Item)
+            then
+               return True;
+            end if;
+
+            Next (Item);
+         end loop;
+
+         return False;
+      end Has_Limited_With_Clauses;
+
+      ------------------------------
+      -- Depends_On_Limited_Views --
+      ------------------------------
+
+      function Depends_On_Limited_Views (Pkg_Id : Entity_Id) return Boolean is
+
+         function Has_Limited_View_Types (Subp : Entity_Id) return Boolean;
+         --  Determines whether the type of some formal of Subp, or its return
+         --  type, is a shadow incomplete entity of a limited-with unit.
+
+         ----------------------------
+         -- Has_Limited_View_Types --
+         ----------------------------
+
+         function Has_Limited_View_Types (Subp : Entity_Id) return Boolean is
+            Formal : Entity_Id := First_Formal (Subp);
+
+         begin
+            while Present (Formal) loop
+               if From_Limited_With (Etype (Formal))
+                 and then Has_Non_Limited_View (Etype (Formal))
+                 and then Ekind (Non_Limited_View (Etype (Formal)))
+                            = E_Incomplete_Type
+               then
+                  return True;
+               end if;
+
+               Formal := Next_Formal (Formal);
+            end loop;
+
+            if Ekind (Subp) = E_Function
+              and then From_Limited_With (Etype (Subp))
+              and then Has_Non_Limited_View (Etype (Subp))
+              and then Ekind (Non_Limited_View (Etype (Subp)))
+                         = E_Incomplete_Type
+            then
+               return True;
+            end if;
+
+            return False;
+         end Has_Limited_View_Types;
+
+         --  Local variables
+
+         E : Entity_Id := First_Entity (Pkg_Id);
+
+      begin
+         while Present (E) loop
+            if Is_Subprogram (E)
+              and then Has_Limited_View_Types (E)
+            then
+               return True;
+
+            --  Recursion on nested packages skipping package renamings
+
+            elsif Ekind (E) = E_Package
+              and then No (Renamed_Entity (E))
+              and then Depends_On_Limited_Views (E)
+            then
+               return True;
+            end if;
+
+            Next_Entity (E);
+         end loop;
+
+         return False;
+      end Depends_On_Limited_Views;
+
+      --  Local variables
+
+      Item : Node_Id;
+
+   --  Start of processing for Analyze_Required_Limited_With_Units
+
+   begin
+      --  Cases where no action is required
+
+      if not Expander_Active
+        or else Nkind (Unit_Node) /= N_Package_Declaration
+        or else Main_Unit_Entity /= Spec_Id
+        or else Is_Generic_Unit (Spec_Id)
+        or else Unit_Requires_Body (Spec_Id)
+        or else not Has_Limited_With_Clauses
+        or else not Depends_On_Limited_Views (Spec_Id)
+      then
+         return;
+      end if;
+
+      --  Perform full analyis of limited-with units to provide the backend
+      --  with the full-view of shadow entities.
+
+      Item := First (Context_Items (N));
+      while Present (Item) loop
+         if Nkind (Item) = N_With_Clause
+           and then Limited_Present (Item)
+           and then not Implicit_With (Item)
+         then
+            Semantics (Library_Unit (Item));
+         end if;
+
+         Next (Item);
+      end loop;
+   end Analyze_Required_Limited_With_Units;
+
    ----------------------------------
    -- Analyze_Subprogram_Body_Stub --
    ----------------------------------
@@ -2035,8 +2209,8 @@ package body Sem_Ch10 is
          Decl := First (Declarations (Parent (N)));
          while Present (Decl) and then Decl /= N loop
             if Nkind (Decl) = N_Subprogram_Body_Stub
-              and then (Chars (Defining_Unit_Name (Specification (Decl))) =
-                        Chars (Defining_Unit_Name (Specification (N))))
+              and then Chars (Defining_Unit_Name (Specification (Decl))) =
+                       Chars (Defining_Unit_Name (Specification (N)))
             then
                Error_Msg_N ("identifier for stub is not unique", N);
             end if;
@@ -2582,10 +2756,18 @@ package body Sem_Ch10 is
       --  Note: this is not quite right if the user defines one of these units
       --  himself, but that's a marginal case, and fixing it is hard ???
 
-      if Restriction_Check_Required (No_Obsolescent_Features) then
-         if In_Predefined_Renaming (U) then
+      if Ada_Version >= Ada_95
+        and then In_Predefined_Renaming (U)
+      then
+         if Restriction_Check_Required (No_Obsolescent_Features) then
             Check_Restriction (No_Obsolescent_Features, N);
             Restriction_Violation := True;
+         end if;
+
+         if Warn_On_Obsolescent_Feature then
+            Error_Msg_N
+              ("renamed predefined unit is an obsolescent feature "
+               & "(RM J.1)?j?", N);
          end if;
       end if;
 
@@ -3124,6 +3306,7 @@ package body Sem_Ch10 is
       --  incomplete type, and carries the corresponding attributes.
 
       Mutate_Ekind           (Ent, E_Incomplete_Type);
+      Set_Is_Not_Self_Hidden (Ent);
       Set_Etype              (Ent, Ent);
       Set_Full_View          (Ent, Empty);
       Set_Is_First_Subtype   (Ent);
@@ -3353,19 +3536,17 @@ package body Sem_Ch10 is
    --  Start of processing for Has_With_Clause
 
    begin
-      if Present (Context_Items (C_Unit)) then
-         Item := First (Context_Items (C_Unit));
-         while Present (Item) loop
-            if Nkind (Item) = N_With_Clause
-              and then Limited_Present (Item) = Is_Limited
-              and then Named_Unit (Item) = Pack
-            then
-               return True;
-            end if;
+      Item := First (Context_Items (C_Unit));
+      while Present (Item) loop
+         if Nkind (Item) = N_With_Clause
+           and then Limited_Present (Item) = Is_Limited
+           and then Named_Unit (Item) = Pack
+         then
+            return True;
+         end if;
 
-            Next (Item);
-         end loop;
-      end if;
+         Next (Item);
+      end loop;
 
       return False;
    end Has_With_Clause;
@@ -4172,6 +4353,10 @@ package body Sem_Ch10 is
                      Set_Subtype_Indication (Decl,
                        New_Occurrence_Of (Non_Lim_View, Sloc (Def_Id)));
                      Set_Etype (Def_Id, Non_Lim_View);
+                     Reinit_Field_To_Zero (Def_Id, F_Non_Limited_View,
+                       Old_Ekind => (E_Incomplete_Subtype => True,
+                                     others => False));
+                     Reinit_Field_To_Zero (Def_Id, F_Private_Dependents);
                      Mutate_Ekind
                        (Def_Id, Subtype_Kind (Ekind (Non_Lim_View)));
                      Set_Analyzed (Decl, False);
@@ -4674,9 +4859,9 @@ package body Sem_Ch10 is
                --  Save for subsequent examination of import pragmas.
 
                if Comes_From_Source (Decl)
-                 and then (Nkind (Decl) in N_Subprogram_Declaration
-                                         | N_Subprogram_Renaming_Declaration
-                                         | N_Generic_Subprogram_Declaration)
+                 and then Nkind (Decl) in N_Subprogram_Declaration
+                                        | N_Subprogram_Renaming_Declaration
+                                        | N_Generic_Subprogram_Declaration
                then
                   Append_Elmt (Defining_Entity (Decl), Subp_List);
 
@@ -5805,7 +5990,8 @@ package body Sem_Ch10 is
             Mutate_Ekind (Shadow, Ekind (Ent));
          end if;
 
-         Set_Is_Internal       (Shadow);
+         Set_Is_Not_Self_Hidden (Shadow);
+         Set_Is_Internal (Shadow);
          Set_From_Limited_With (Shadow);
 
          --  Add the new shadow entity to the limited view of the package
@@ -5872,6 +6058,7 @@ package body Sem_Ch10 is
       procedure Decorate_State (Ent : Entity_Id; Scop : Entity_Id) is
       begin
          Mutate_Ekind            (Ent, E_Abstract_State);
+         Set_Is_Not_Self_Hidden  (Ent);
          Set_Etype               (Ent, Standard_Void_Type);
          Set_Scope               (Ent, Scop);
          Set_Encapsulating_State (Ent, Empty);
@@ -6232,11 +6419,12 @@ package body Sem_Ch10 is
             raise Program_Error;
       end case;
 
-      --  The withed unit may not be analyzed, but the with calause itself
+      --  The withed unit may not be analyzed, but the with clause itself
       --  must be minimally decorated. This ensures that the checks on unused
       --  with clauses also process limieted withs.
 
       Mutate_Ekind (Pack, E_Package);
+      Set_Is_Not_Self_Hidden (Pack);
       Set_Etype (Pack, Standard_Void_Type);
 
       if Is_Entity_Name (Nam) then

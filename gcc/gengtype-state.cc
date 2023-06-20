@@ -1,7 +1,7 @@
 /* Gengtype persistent state serialization & de-serialization.
    Useful for gengtype in plugin mode.
 
-   Copyright (C) 2010-2022 Free Software Foundation, Inc.
+   Copyright (C) 2010-2023 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -473,43 +473,33 @@ read_a_state_token (void)
 		{
 		case 'a':
 		  obstack_1grow (&bstring_obstack, '\a');
-		  getc (state_file);
 		  break;
 		case 'b':
 		  obstack_1grow (&bstring_obstack, '\b');
-		  getc (state_file);
 		  break;
 		case 't':
 		  obstack_1grow (&bstring_obstack, '\t');
-		  getc (state_file);
 		  break;
 		case 'n':
 		  obstack_1grow (&bstring_obstack, '\n');
-		  getc (state_file);
 		  break;
 		case 'v':
 		  obstack_1grow (&bstring_obstack, '\v');
-		  getc (state_file);
 		  break;
 		case 'f':
 		  obstack_1grow (&bstring_obstack, '\f');
-		  getc (state_file);
 		  break;
 		case 'r':
 		  obstack_1grow (&bstring_obstack, '\r');
-		  getc (state_file);
 		  break;
 		case '"':
 		  obstack_1grow (&bstring_obstack, '\"');
-		  getc (state_file);
 		  break;
 		case '\\':
 		  obstack_1grow (&bstring_obstack, '\\');
-		  getc (state_file);
 		  break;
 		case ' ':
 		  obstack_1grow (&bstring_obstack, ' ');
-		  getc (state_file);
 		  break;
 		case 'x':
 		  {

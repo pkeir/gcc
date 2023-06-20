@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2010-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 2010-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -41,20 +41,20 @@ package body Aspects is
    --  type. False means it is not inherited.
 
    Base_Aspect : constant array (Aspect_Id) of Boolean :=
-     (Aspect_Atomic                  => True,
-      Aspect_Atomic_Components       => True,
-      Aspect_Constant_Indexing       => True,
-      Aspect_Default_Iterator        => True,
-      Aspect_Discard_Names           => True,
-      Aspect_Independent_Components  => True,
-      Aspect_Iterator_Element        => True,
-      Aspect_Stable_Properties       => True,
-      Aspect_Type_Invariant          => True,
-      Aspect_Unchecked_Union         => True,
-      Aspect_Variable_Indexing       => True,
-      Aspect_Volatile                => True,
-      Aspect_Volatile_Full_Access    => True,
-      others                         => False);
+     (Aspect_Atomic                 => True,
+      Aspect_Atomic_Components      => True,
+      Aspect_Constant_Indexing      => True,
+      Aspect_Default_Iterator       => True,
+      Aspect_Discard_Names          => True,
+      Aspect_Independent_Components => True,
+      Aspect_Iterator_Element       => True,
+      Aspect_Stable_Properties      => True,
+      Aspect_Type_Invariant         => True,
+      Aspect_Unchecked_Union        => True,
+      Aspect_Variable_Indexing      => True,
+      Aspect_Volatile               => True,
+      Aspect_Volatile_Full_Access   => True,
+      others                        => False);
 
    --  The following array indicates type aspects that are inherited and apply
    --  to the class-wide type as well.
@@ -373,7 +373,6 @@ package body Aspects is
          else
             Asps := New_List;
             Set_Aspect_Specifications (To, Asps);
-            Set_Has_Aspects (To);
          end if;
 
          --  Remove the aspect from its original owner and relocate it to node
@@ -543,6 +542,7 @@ package body Aspects is
       --  ...except for these:
 
       Result (Aspect_Dynamic_Predicate)  := Aspect_Predicate;
+      Result (Aspect_Ghost_Predicate)    := Aspect_Predicate;
       Result (Aspect_Inline_Always)      := Aspect_Inline;
       Result (Aspect_Interrupt_Priority) := Aspect_Priority;
       Result (Aspect_Postcondition)      := Aspect_Post;

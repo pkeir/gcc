@@ -1,6 +1,6 @@
 /* Breadth-first and depth-first routines for
    searching multiple-inheritance lattice for GNU C++.
-   Copyright (C) 1987-2022 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "spellcheck-tree.h"
 #include "stringpool.h"
 #include "attribs.h"
+#include "tree-inline.h"
 
 static int is_subobject_of_p (tree, tree);
 static tree dfs_lookup_base (tree, void *);
@@ -55,6 +56,7 @@ static tree dfs_get_pure_virtuals (tree, void *);
 
 struct lookup_base_data_s
 {
+  HOST_WIDE_INT offset; /* Offset we want, or -1 if any.  */
   tree t;		/* type being searched.  */
   tree base;		/* The base type we're looking for.  */
   tree binfo;		/* Found binfo.  */
@@ -72,6 +74,22 @@ static tree
 dfs_lookup_base (tree binfo, void *data_)
 {
   struct lookup_base_data_s *data = (struct lookup_base_data_s *) data_;
+
+  if (data->offset != -1)
+    {
+      /* We're looking for the type at a particular offset.  */
+      int comp = compare_tree_int (BINFO_OFFSET (binfo), data->offset);
+      if (comp > 0)
+	/* Don't bother looking into bases laid out later; even if they
+	   do virtually inherit from the base we want, we can get there
+	   by another path.  */
+	return dfs_skip_bases;
+      else if (comp != 0
+	       && SAME_BINFO_TYPE_P (BINFO_TYPE (binfo), data->base))
+	/* Right type, wrong offset.  */
+	return dfs_skip_bases;
+      /* Fall through.  */
+    }
 
   if (SAME_BINFO_TYPE_P (BINFO_TYPE (binfo), data->base))
     {
@@ -189,7 +207,7 @@ accessible_base_p (tree t, tree base, bool consider_local_p)
 /* Lookup BASE in the hierarchy dominated by T.  Do access checking as
    ACCESS specifies.  Return the binfo we discover.  If KIND_PTR is
    non-NULL, fill with information about what kind of base we
-   discovered.
+   discovered.  If OFFSET is other than -1, only match at that offset.
 
    If the base is inaccessible, or ambiguous, then error_mark_node is
    returned.  If the tf_error bit of COMPLAIN is not set, no error
@@ -197,7 +215,8 @@ accessible_base_p (tree t, tree base, bool consider_local_p)
 
 tree
 lookup_base (tree t, tree base, base_access access,
-	     base_kind *kind_ptr, tsubst_flags_t complain)
+	     base_kind *kind_ptr, tsubst_flags_t complain,
+	     HOST_WIDE_INT offset /* = -1 */)
 {
   tree binfo;
   tree t_binfo;
@@ -245,8 +264,9 @@ lookup_base (tree t, tree base, base_access access,
       data.base = base;
       data.binfo = NULL_TREE;
       data.ambiguous = data.via_virtual = false;
-      data.repeated_base = CLASSTYPE_REPEATED_BASE_P (t);
+      data.repeated_base = (offset == -1) && CLASSTYPE_REPEATED_BASE_P (t);
       data.want_any = access == ba_any;
+      data.offset = offset;
 
       dfs_walk_once (t_binfo, dfs_lookup_base, NULL, &data);
       binfo = data.binfo;
@@ -481,6 +501,25 @@ context_for_name_lookup (tree decl)
   if (!context)
     context = global_namespace;
 
+  return context;
+}
+
+/* Like the above, but always return a type, because it's simpler for member
+   handling to refer to the anonymous aggr rather than a function.  */
+
+tree
+type_context_for_name_lookup (tree decl)
+{
+  tree context = DECL_P (decl) ? DECL_CONTEXT (decl) : decl;
+  gcc_checking_assert (CLASS_TYPE_P (context));
+
+  while (context && TYPE_P (context) && ANON_AGGR_TYPE_P (context))
+    {
+      tree next = TYPE_CONTEXT (context);
+      if (!TYPE_P (next))
+	break;
+      context = next;
+    }
   return context;
 }
 
@@ -880,6 +919,10 @@ accessible_p (tree type, tree decl, bool consider_local_p)
   else
     otype = type;
 
+  /* Anonymous unions don't have their own access.  */
+  if (ANON_AGGR_TYPE_P (type))
+    type = type_context_for_name_lookup (type);
+
   /* [class.access.base]
 
      A member m is accessible when named in class N if
@@ -1108,7 +1151,7 @@ build_baselink (tree binfo, tree access_binfo, tree functions, tree optype)
 
 tree
 lookup_member (tree xbasetype, tree name, int protect, bool want_type,
-	       tsubst_flags_t complain, access_failure_info *afi)
+	       tsubst_flags_t complain, access_failure_info *afi /* = NULL */)
 {
   tree rval, rval_binfo = NULL_TREE;
   tree type = NULL_TREE, basetype_path = NULL_TREE;
@@ -2082,6 +2125,33 @@ check_final_overrider (tree overrider, tree basefn)
 	}
       return 0;
     }
+
+  if (!DECL_HAS_CONTRACTS_P (basefn) && DECL_HAS_CONTRACTS_P (overrider))
+    {
+      auto_diagnostic_group d;
+      error ("function with contracts %q+D overriding contractless function",
+	     overrider);
+      inform (DECL_SOURCE_LOCATION (basefn),
+	      "overridden function is %qD", basefn);
+      return 0;
+    }
+  else if (DECL_HAS_CONTRACTS_P (basefn) && !DECL_HAS_CONTRACTS_P (overrider))
+    {
+      /* We're inheriting basefn's contracts; create a copy of them but
+	 replace references to their parms to our parms.  */
+      inherit_base_contracts (overrider, basefn);
+    }
+  else if (DECL_HAS_CONTRACTS_P (basefn) && DECL_HAS_CONTRACTS_P (overrider))
+    {
+      /* We're in the process of completing the overrider's class, which means
+	 our conditions definitely are not parsed so simply chain on the
+	 basefn for later checking.
+
+	 Note that OVERRIDER's contracts will have been fully parsed at the
+	 point the deferred match is run.  */
+      defer_guarded_contract_match (overrider, basefn, DECL_CONTRACTS (basefn));
+    }
+
   if (DECL_FINAL_P (basefn))
     {
       auto_diagnostic_group d;

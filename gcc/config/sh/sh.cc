@@ -1,5 +1,5 @@
 /* Output routines for GCC for Renesas / SuperH SH.
-   Copyright (C) 1993-2022 Free Software Foundation, Inc.
+   Copyright (C) 1993-2023 Free Software Foundation, Inc.
    Contributed by Steve Chamberlain (sac@cygnus.com).
    Improved by Jim Wilson (wilson@cygnus.com).
 
@@ -2178,7 +2178,7 @@ expand_cbranchdi4 (rtx *operands, enum rtx_code comparison)
 	  && prob.to_reg_br_prob_base () >= (int) (REG_BR_PROB_BASE * 3 / 8U)
 	  && prob.to_reg_br_prob_base () <= (int) (REG_BR_PROB_BASE * 5 / 8U))
 	{
-	  msw_taken_prob = prob.apply_scale (1, 2);
+	  msw_taken_prob = prob / 2;
 	  msw_skip_prob = rev_prob.apply_scale (REG_BR_PROB_BASE,
 						rev_prob.to_reg_br_prob_base ()
 						+ REG_BR_PROB_BASE);
@@ -7697,7 +7697,7 @@ sh_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
       eff_type = type;
       while (TREE_CODE (eff_type) == RECORD_TYPE
 	     && (member = find_sole_member (eff_type))
-	     && (TREE_CODE (TREE_TYPE (member)) == REAL_TYPE
+	     && (SCALAR_FLOAT_TYPE_P (TREE_TYPE (member))
 		 || TREE_CODE (TREE_TYPE (member)) == COMPLEX_TYPE
 		 || TREE_CODE (TREE_TYPE (member)) == RECORD_TYPE))
 	{
@@ -7718,14 +7718,14 @@ sh_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
       bool pass_as_float;
       if (TARGET_FPU_DOUBLE)
 	{
-	  pass_as_float = ((TREE_CODE (eff_type) == REAL_TYPE && size <= 8)
+	  pass_as_float = ((SCALAR_FLOAT_TYPE_P (eff_type) && size <= 8)
 			   || (TREE_CODE (eff_type) == COMPLEX_TYPE
-			       && TREE_CODE (TREE_TYPE (eff_type)) == REAL_TYPE
+			       && SCALAR_FLOAT_TYPE_P (TREE_TYPE (eff_type))
 			       && size <= 16));
 	}
       else
 	{
-	  pass_as_float = (TREE_CODE (eff_type) == REAL_TYPE && size == 4);
+	  pass_as_float = (SCALAR_FLOAT_TYPE_P (eff_type) && size == 4);
 	}
 
       addr = create_tmp_var (pptr_type_node);
@@ -7738,7 +7738,7 @@ sh_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
 	{
 	  tree next_fp_tmp = create_tmp_var (TREE_TYPE (f_next_fp));
 	  tree cmp;
-	  bool is_double = size == 8 && TREE_CODE (eff_type) == REAL_TYPE;
+	  bool is_double = size == 8 && SCALAR_FLOAT_TYPE_P (eff_type);
 
 	  tmp = build1 (ADDR_EXPR, pptr_type_node, unshare_expr (next_fp));
 	  gimplify_assign (unshare_expr (addr), tmp, pre_p);
@@ -8139,7 +8139,7 @@ sh_function_value (const_tree valtype,
 	     && (TREE_CODE (valtype) == INTEGER_TYPE
 		 || TREE_CODE (valtype) == ENUMERAL_TYPE
 		 || TREE_CODE (valtype) == BOOLEAN_TYPE
-		 || TREE_CODE (valtype) == REAL_TYPE
+		 || SCALAR_FLOAT_TYPE_P (valtype)
 		 || TREE_CODE (valtype) == OFFSET_TYPE))
 	    && sh_promote_prototypes (fn_decl_or_type)
 	    ? SImode : TYPE_MODE (valtype)),
@@ -8183,11 +8183,12 @@ sh_setup_incoming_varargs (cumulative_args_t ca,
   gcc_assert (cfun->stdarg);
   if (TARGET_VARARGS_PRETEND_ARGS (current_function_decl))
     {
-      int named_parm_regs, anon_parm_regs;
+      int named_parm_regs = 0, anon_parm_regs;
 
-      named_parm_regs = (sh_round_reg (*get_cumulative_args (ca), arg.mode)
-			 + CEIL (arg.promoted_size_in_bytes (),
-				 UNITS_PER_WORD));
+      if (!TYPE_NO_NAMED_ARGS_STDARG_P (TREE_TYPE (current_function_decl)))
+	named_parm_regs = (sh_round_reg (*get_cumulative_args (ca), arg.mode)
+			   + CEIL (arg.promoted_size_in_bytes (),
+				   UNITS_PER_WORD));
       anon_parm_regs = NPARM_REGS (SImode) - named_parm_regs;
       if (anon_parm_regs > 0)
 	*pretend_arg_size = anon_parm_regs * 4;

@@ -1,5 +1,5 @@
 /* Definitions for microarchitecture-related data structures.
-   Copyright (C) 2021-2022 Free Software Foundation, Inc.
+   Copyright (C) 2021-2023 Free Software Foundation, Inc.
    Contributed by Loongson Ltd.
 
 This file is part of GCC.
@@ -45,6 +45,15 @@ struct loongarch_cache {
     int l1d_line_size;  /* bytes */
     int l1d_size;       /* KiB */
     int l2d_size;       /* kiB */
+    int simultaneous_prefetches; /* number of parallel prefetch */
+};
+
+/* Alignment for functions and labels for best performance.  For new uarchs
+   the value should be measured via benchmarking.  See the documentation for
+   -falign-functions and -falign-labels in invoke.texi for the format.  */
+struct loongarch_align {
+  const char *function;	/* default value for -falign-functions */
+  const char *label;	/* default value for -falign-labels */
 };
 
 #endif /* LOONGARCH_TUNE_H */

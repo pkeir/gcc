@@ -1,5 +1,5 @@
 /* Output routines for Motorola MCore processor
-   Copyright (C) 1993-2022 Free Software Foundation, Inc.
+   Copyright (C) 1993-2023 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -1182,7 +1182,7 @@ output_inline_const (machine_mode mode, rtx operands[])
   int trick_no;
   rtx out_operands[3];
   char buf[256];
-  char load_op[256];
+  char load_op[128];
   const char *dst_fmt;
   HOST_WIDE_INT value;
 
@@ -1953,8 +1953,9 @@ mcore_setup_incoming_varargs (cumulative_args_t args_so_far_v,
   /* We need to know how many argument registers are used before
      the varargs start, so that we can push the remaining argument
      registers during the prologue.  */
-  number_of_regs_before_varargs
-    = *args_so_far + mcore_num_arg_regs (arg.mode, arg.type);
+  number_of_regs_before_varargs = *args_so_far;
+  if (!TYPE_NO_NAMED_ARGS_STDARG_P (TREE_TYPE (current_function_decl)))
+    number_of_regs_before_varargs += mcore_num_arg_regs (arg.mode, arg.type);
   
   /* There is a bug somewhere in the arg handling code.
      Until I can find it this workaround always pushes the
@@ -2952,7 +2953,7 @@ mcore_mark_dllimport (tree decl)
      and that would be a good question.  */
 
   /* Imported variables can't be initialized.  */
-  if (TREE_CODE (decl) == VAR_DECL
+  if (VAR_P (decl)
       && !DECL_VIRTUAL_P (decl)
       && DECL_INITIAL (decl))
     {
@@ -2962,7 +2963,7 @@ mcore_mark_dllimport (tree decl)
   
   /* `extern' needn't be specified with dllimport.
      Specify `extern' now and hope for the best.  Sigh.  */
-  if (TREE_CODE (decl) == VAR_DECL
+  if (VAR_P (decl)
       /* ??? Is this test for vtables needed?  */
       && !DECL_VIRTUAL_P (decl))
     {
@@ -3023,7 +3024,7 @@ mcore_encode_section_info (tree decl, rtx rtl ATTRIBUTE_UNUSED, int first ATTRIB
      a subsequent definition nullified that.  The attribute is gone
      but DECL_RTL still has @i.__imp_foo.  We need to remove that.  */
   else if ((TREE_CODE (decl) == FUNCTION_DECL
-	    || TREE_CODE (decl) == VAR_DECL)
+	    || VAR_P (decl))
 	   && DECL_RTL (decl) != NULL_RTX
 	   && GET_CODE (DECL_RTL (decl)) == MEM
 	   && GET_CODE (XEXP (DECL_RTL (decl), 0)) == MEM

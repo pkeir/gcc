@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2022 Free Software Foundation, Inc.
+// Copyright (C) 2020-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -107,7 +107,7 @@ void
 test02()
 {
   namespace fs = std::filesystem;
-  auto dir = __gnu_test::nonexistent_path();
+  const auto dir = __gnu_test::nonexistent_path();
   fs::create_directories(dir/"subdir");
 
   std::error_code ec;
@@ -137,7 +137,12 @@ test02()
   }
 #endif
 
-  fs::remove_all(dir, ec);
+  // Cannot use fs::remove_all here because that uses
+  // recursive_directory_iterator which would use the fake readdir above.
+#ifndef _GLIBCXX_FILESYSTEM_IS_WINDOWS
+  ::rmdir((dir/"subdir").c_str());
+  ::rmdir(dir.c_str());
+#endif
 }
 
 int

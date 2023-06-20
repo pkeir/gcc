@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -114,10 +114,7 @@ package body Ch12 is
 
       --  Check for generic renaming declaration case
 
-      if Token = Tok_Package
-        or else Token = Tok_Function
-        or else Token = Tok_Procedure
-      then
+      if Token in Tok_Package | Tok_Function | Tok_Procedure then
          Ren_Token := Token;
          Scan; -- scan past PACKAGE, FUNCTION or PROCEDURE
 

@@ -1,5 +1,5 @@
 /* Top level of GCC compilers (cc1, cc1plus, etc.)
-   Copyright (C) 1987-2022 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -88,14 +88,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "ipa-modref.h"
 #include "ipa-param-manipulation.h"
 #include "dbgcnt.h"
-
-#if defined(DBX_DEBUGGING_INFO) || defined(XCOFF_DEBUGGING_INFO)
-#include "dbxout.h"
-#endif
-
-#ifdef XCOFF_DEBUGGING_INFO
-#include "xcoffout.h"		/* Needed for external data declarations. */
-#endif
 
 #include "selftest.h"
 
@@ -331,7 +323,7 @@ wrapup_global_declaration_1 (tree decl)
 {
   /* We're not deferring this any longer.  Assignment is conditional to
      avoid needlessly dirtying PCH pages.  */
-  if (CODE_CONTAINS_STRUCT (TREE_CODE (decl), TS_DECL_WITH_VIS)
+  if (HAS_DECL_ASSEMBLER_NAME_P (decl)
       && DECL_DEFER_OUTPUT (decl) != 0)
     DECL_DEFER_OUTPUT (decl) = 0;
 
@@ -721,7 +713,7 @@ init_asm_output (const char *name)
 		     "cannot open %qs for writing: %m", asm_file_name);
     }
 
-  if (!flag_syntax_only)
+  if (!flag_syntax_only && !(global_dc->lang_mask & CL_LTODump))
     {
       targetm.asm_out.file_start ();
 
@@ -837,7 +829,8 @@ output_stack_usage_1 (FILE *cf)
   if (stack_usage_file)
     {
       print_decl_identifier (stack_usage_file, current_function_decl,
-			     PRINT_DECL_ORIGIN | PRINT_DECL_NAME);
+			     PRINT_DECL_ORIGIN | PRINT_DECL_NAME
+			     | PRINT_DECL_REMAP_DEBUG);
       fprintf (stack_usage_file, "\t" HOST_WIDE_INT_PRINT_DEC"\t%s\n",
 	       stack_usage, stack_usage_kind_str[stack_usage_kind]);
     }
@@ -1038,6 +1031,8 @@ general_init (const char *argv0, bool init_signals)
     = global_options_init.x_flag_diagnostics_show_line_numbers;
   global_dc->show_cwe
     = global_options_init.x_flag_diagnostics_show_cwe;
+  global_dc->show_rules
+    = global_options_init.x_flag_diagnostics_show_rules;
   global_dc->path_format
     = (enum diagnostic_path_format)global_options_init.x_flag_diagnostics_path_format;
   global_dc->show_path_depths
@@ -1364,7 +1359,7 @@ process_options (bool no_backend)
      option flags in use.  */
   if (version_flag)
     {
-      print_version (stderr, "", true);
+      /* We already printed the version header in main ().  */
       if (!quiet_flag)
 	{
 	  fputs ("options passed: ", stderr);
@@ -1415,21 +1410,8 @@ process_options (bool no_backend)
       && ctf_debug_info_level == CTFINFO_LEVEL_NONE)
     write_symbols = NO_DEBUG;
 
-  /* Warn if STABS debug gets enabled and is not the default.  */
-  if (PREFERRED_DEBUGGING_TYPE != DBX_DEBUG && (write_symbols & DBX_DEBUG))
-    warning (0, "STABS debugging information is obsolete and not "
-	     "supported anymore");
-
   if (write_symbols == NO_DEBUG)
     ;
-#if defined(DBX_DEBUGGING_INFO)
-  else if (write_symbols == DBX_DEBUG)
-    debug_hooks = &dbx_debug_hooks;
-#endif
-#if defined(XCOFF_DEBUGGING_INFO)
-  else if (write_symbols == XCOFF_DEBUG)
-    debug_hooks = &xcoff_debug_hooks;
-#endif
 #ifdef DWARF2_DEBUGGING_INFO
   else if (dwarf_debuginfo_p ())
     debug_hooks = &dwarf2_debug_hooks;
@@ -1599,7 +1581,7 @@ process_options (bool no_backend)
   if (flag_stack_check != NO_STACK_CHECK && flag_stack_clash_protection)
     {
       warning_at (UNKNOWN_LOCATION, 0,
-		  "%<-fstack-check=%> and %<-fstack-clash_protection%> are "
+		  "%<-fstack-check=%> and %<-fstack-clash-protection%> are "
 		  "mutually exclusive; disabling %<-fstack-check=%>");
       flag_stack_check = NO_STACK_CHECK;
     }
@@ -2271,6 +2253,10 @@ toplev::main (int argc, char **argv)
 
   initialize_plugins ();
 
+  /* Handle the dump options now that plugins have had a chance to install new
+     passes.  */
+  handle_deferred_dump_options ();
+
   if (version_flag)
     print_version (stderr, "", true);
 
@@ -2295,7 +2281,7 @@ toplev::main (int argc, char **argv)
 	start_timevars ();
       do_compile (no_backend);
 
-      if (flag_self_test)
+      if (flag_self_test && !seen_error ())
 	{
 	  if (no_backend)
 	    error_at (UNKNOWN_LOCATION, "self-tests incompatible with %<-E%>");

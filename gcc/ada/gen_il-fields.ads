@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2020-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 2020-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -69,7 +69,6 @@ package Gen_IL.Fields is
       Address_Warning_Posted,
       Aggregate_Bounds,
       Aliased_Present,
-      Alloc_For_BIP_Return,
       All_Others,
       All_Present,
       Alternatives,
@@ -88,7 +87,7 @@ package Gen_IL.Fields is
       Body_Required,
       Body_To_Inline,
       Box_Present,
-      By_Ref,
+      Cannot_Be_Superflat,
       Char_Literal_Value,
       Chars,
       Check_Address_Alignment,
@@ -97,7 +96,9 @@ package Gen_IL.Fields is
       Class_Present,
       Classifications,
       Cleanup_Actions,
+      Comes_From_Check_Or_Contract,
       Comes_From_Extended_Return_Statement,
+      Comes_From_Iterator,
       Compile_Time_Known_Aggregate,
       Component_Associations,
       Component_Clauses,
@@ -184,11 +185,11 @@ package Gen_IL.Fields is
       First_Inlined_Subprogram,
       First_Name,
       First_Named_Actual,
-      First_Real_Statement,
       First_Subtype_Link,
       Float_Truncate,
       Formal_Type_Definition,
       Forwards_OK,
+      For_Special_Return_Object,
       From_Aspect_Specification,
       From_At_Mod,
       From_Conditional_Expression,
@@ -209,6 +210,7 @@ package Gen_IL.Fields is
       Has_Pragma_Suppress_All,
       Has_Private_View,
       Has_Relative_Deadline_Pragma,
+      Has_Secondary_Private_View,
       Has_Self_Reference,
       Has_SP_Choice,
       Has_Storage_Size_Pragma,
@@ -320,9 +322,9 @@ package Gen_IL.Fields is
       No_Ctrl_Actions,
       No_Elaboration_Check,
       No_Entities_Ref_In_Spec,
+      No_Finalize_Actions,
       No_Initialization,
       No_Minimize_Eliminate,
-      No_Side_Effect_Removal,
       No_Truncation,
       Null_Excluding_Subtype,
       Null_Exclusion_Present,
@@ -489,7 +491,6 @@ package Gen_IL.Fields is
       Default_Expressions_Processed,
       Default_Value,
       Delay_Cleanups,
-      Delay_Subprogram_Descriptors,
       Delta_Value,
       Dependent_Instances,
       Depends_On_Private,
@@ -578,6 +579,7 @@ package Gen_IL.Fields is
       Has_Expanded_Contract,
       Has_Forward_Instantiation,
       Has_Fully_Qualified_Name,
+      Has_Ghost_Predicate_Aspect,
       Has_Gigi_Rep_Item,
       Has_Homonym,
       Has_Implicit_Dereference,
@@ -751,6 +753,7 @@ package Gen_IL.Fields is
       Is_Package_Body_Entity,
       Is_Packed,
       Is_Packed_Array_Impl_Type,
+      Is_Not_Self_Hidden,
       Is_Param_Block_Component_Type,
       Is_Partial_Invariant_Procedure,
       Is_Potentially_Use_Visible,
@@ -931,7 +934,8 @@ package Gen_IL.Fields is
       Warnings_Off_Used_Unmodified,
       Warnings_Off_Used_Unreferenced,
       Was_Hidden,
-      Wrapped_Entity
+      Wrapped_Entity,
+      Wrapped_Statements
 
       --  End of entity fields.
      ); -- Opt_Field_Enum

@@ -1,5 +1,5 @@
 ;; Constraint definitions for LoongArch.
-;; Copyright (C) 2021-2022 Free Software Foundation, Inc.
+;; Copyright (C) 2021-2023 Free Software Foundation, Inc.
 ;; Contributed by Loongson Ltd.
 ;;
 ;; This file is part of GCC.
@@ -20,14 +20,14 @@
 
 ;; Register constraints
 
-;; "a" "A constant call global and noplt address."
-;; "b" <-----unused
+;; "a" <-----unused
+;; "b" "A constant call not local address."
 ;; "c" "A constant call local address."
 ;; "d" <-----unused
 ;; "e" JIRL_REGS
 ;; "f" FP_REGS
 ;; "g" <-----unused
-;; "h" "A constant call plt address."
+;; "h" <-----unused
 ;; "i" "Matches a general integer constant." (Global non-architectural)
 ;; "j" SIBCALL_REGS
 ;; "k" "A memory operand whose address is formed by a base register and
@@ -42,7 +42,7 @@
 ;; "q" CSR_REGS
 ;; "r" GENERAL_REGS (Global non-architectural)
 ;; "s" "Matches a symbolic integer constant." (Global non-architectural)
-;; "t" "A constant call weak address"
+;; "t" <-----unused
 ;; "u" "A signed 52bit constant and low 32-bit is zero (for logic instructions)"
 ;; "v" "A signed 64-bit constant and low 44-bit is zero (for logic instructions)."
 ;; "w" "Matches any valid memory."
@@ -60,7 +60,22 @@
 ;; "I" "A signed 12-bit constant (for arithmetic instructions)."
 ;; "J" "Integer zero."
 ;; "K" "An unsigned 12-bit constant (for logic instructions)."
-;; "L" <-----unused
+;; "L" -
+;;     "La"
+;;	 "A signed constant in [-4096, 2048) or (2047, 4094]."
+;;     "Lb"
+;;	 "A signed 32-bit constant and low 16-bit is zero, which can be
+;;	  added onto a register with addu16i.d.  It matches nothing if
+;;	  the addu16i.d instruction is not available."
+;;     "Lc"
+;;	 "A signed 64-bit constant can be expressed as Lb + I, but not a
+;;	  single Lb or I."
+;;     "Ld"
+;;	 "A signed 64-bit constant can be expressed as Lb + Lb, but not a
+;;	  single Lb."
+;;     "Le"
+;;	 "A signed 32-bit constant can be expressed as Lb + I, but not a
+;;	  single Lb or I."
 ;; "M" <-----unused
 ;; "N" <-----unused
 ;; "O" <-----unused
@@ -86,13 +101,17 @@
 ;;    "ZB"
 ;;      "An address that is held in a general-purpose register.
 ;;      The offset is zero"
+;;    "ZD"
+;;	"An address operand whose address is formed by a base register
+;;	 and offset that is suitable for use in instructions with the same
+;;	 addressing mode as @code{preld}."
 ;; "<" "Matches a pre-dec or post-dec operand." (Global non-architectural)
 ;; ">" "Matches a pre-inc or post-inc operand." (Global non-architectural)
 
-(define_constraint "a"
+(define_constraint "b"
   "@internal
-   A constant call global and noplt address."
-  (match_operand 0 "is_const_call_global_noplt_symbol"))
+   A constant call no local address."
+  (match_operand 0 "is_const_call_no_local_symbol"))
 
 (define_constraint "c"
   "@internal
@@ -104,11 +123,6 @@
 
 (define_register_constraint "f" "TARGET_HARD_FLOAT ? FP_REGS : NO_REGS"
   "A floating-point register (if available).")
-
-(define_constraint "h"
-  "@internal
-   A constant call plt address."
-  (match_operand 0 "is_const_call_plt_symbol"))
 
 (define_register_constraint "j" "SIBCALL_REGS"
   "@internal")
@@ -133,11 +147,6 @@
 
 (define_register_constraint "q" "CSR_REGS"
   "A general-purpose register except for $r0 and $r1 for lcsr.")
-
-(define_constraint "t"
-  "@internal
-   A constant call weak address."
-  (match_operand 0 "is_const_call_weak_symbol"))
 
 (define_constraint "u"
   "A signed 52bit constant and low 32-bit is zero (for logic instructions)."
@@ -176,6 +185,35 @@
   (and (match_code "const_int")
        (match_test "IMM12_OPERAND_UNSIGNED (ival)")))
 
+(define_constraint "La"
+  "A signed constant in [-4096, 2048) or (2047, 4094]."
+  (and (match_code "const_int")
+       (match_test "DUAL_IMM12_OPERAND (ival)")))
+
+(define_constraint "Lb"
+  "A signed 32-bit constant and low 16-bit is zero, which can be added
+   onto a register with addu16i.d."
+  (and (match_code "const_int")
+       (match_test "ADDU16I_OPERAND (ival)")))
+
+(define_constraint "Lc"
+  "A signed 64-bit constant can be expressed as Lb + I, but not a single Lb
+   or I."
+  (and (match_code "const_int")
+       (match_test "loongarch_addu16i_imm12_operand_p (ival, DImode)")))
+
+(define_constraint "Ld"
+  "A signed 64-bit constant can be expressed as Lb + Lb, but not a single
+   Lb."
+  (and (match_code "const_int")
+       (match_test "DUAL_ADDU16I_OPERAND (ival)")))
+
+(define_constraint "Le"
+  "A signed 32-bit constant can be expressed as Lb + I, but not a single Lb
+   or I."
+  (and (match_code "const_int")
+       (match_test "loongarch_addu16i_imm12_operand_p (ival, SImode)")))
+
 (define_constraint "Yd"
   "@internal
    A constant @code{move_operand} that can be safely loaded using
@@ -200,3 +238,9 @@
   The offset is zero"
   (and (match_code "mem")
        (match_test "REG_P (XEXP (op, 0))")))
+
+(define_address_constraint "ZD"
+  "An address operand whose address is formed by a base register
+   and offset that is suitable for use in instructions with the same
+   addressing mode as @code{preld}."
+   (match_test "loongarch_12bit_offset_address_p (op, mode)"))

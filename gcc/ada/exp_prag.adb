@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -58,6 +58,7 @@ with Stand;          use Stand;
 with Tbuild;         use Tbuild;
 with Uintp;          use Uintp;
 with Validsw;        use Validsw;
+with Warnsw;         use Warnsw;
 
 package body Exp_Prag is
 
@@ -105,12 +106,10 @@ package body Exp_Prag is
          end if;
       end loop;
 
-      if Present (Arg)
-        and then Nkind (Arg) = N_Pragma_Argument_Association
-      then
-         return Expression (Arg);
+      if Present (Arg) then
+         return Get_Pragma_Arg (Arg);
       else
-         return Arg;
+         return Empty;
       end if;
    end Arg_N;
 
@@ -269,6 +268,16 @@ package body Exp_Prag is
          Analyze (N);
       end;
    end Expand_Pragma_Abort_Defer;
+
+   -------------------------------------
+   -- Expand_Pragma_Always_Terminates --
+   -------------------------------------
+
+   procedure Expand_Pragma_Always_Terminates (Prag : Node_Id) is
+      pragma Unreferenced (Prag);
+   begin
+      null;
+   end Expand_Pragma_Always_Terminates;
 
    --------------------------
    -- Expand_Pragma_Check --
@@ -455,6 +464,8 @@ package body Exp_Prag is
                            New_Occurrence_Of (RTE (RE_Assert_Failure),
                                                                    Loc))))))));
 
+         Set_Comes_From_Check_Or_Contract (N);
+
       --  Case where we call the procedure
 
       else
@@ -543,6 +554,8 @@ package body Exp_Prag is
                  Name                   =>
                    New_Occurrence_Of (RTE (RE_Raise_Assert_Failure), Loc),
                  Parameter_Associations => New_List (Relocate_Node (Msg))))));
+
+         Set_Comes_From_Check_Or_Contract (N);
       end if;
 
       Analyze (N);
@@ -561,6 +574,13 @@ package body Exp_Prag is
          then
             null;
 
+         --  For Subprogram_Variant suppress the warning altogether, because
+         --  for mutually recursive subprograms with multiple variant clauses
+         --  some of the clauses might have expressions that are only meant for
+         --  verification and would always fail when executed.
+
+         elsif Nam = Name_Subprogram_Variant then
+            null;
          elsif Nam = Name_Assert then
             Error_Msg_N ("?.a?assertion will fail at run time", N);
          else
@@ -1435,6 +1455,8 @@ package body Exp_Prag is
                 Condition       => Cond,
                 Then_Statements => New_List (Error));
 
+            Set_Comes_From_Check_Or_Contract (Checks);
+
          else
             if No (Elsif_Parts (Checks)) then
                Set_Elsif_Parts (Checks, New_List);
@@ -1644,6 +1666,8 @@ package body Exp_Prag is
                 Condition       => New_Occurrence_Of (Flag, Loc),
                 Then_Statements => Eval_Stmts);
 
+            Set_Comes_From_Check_Or_Contract (Evals);
+
          --  Otherwise generate:
          --    elsif Flag then
          --       <evaluation statements>
@@ -1838,6 +1862,8 @@ package body Exp_Prag is
                   Set (Flag),
                   Increment (Count)));
 
+            Set_Comes_From_Check_Or_Contract (If_Stmt);
+
             Append_To (Decls, If_Stmt);
             Analyze (If_Stmt);
 
@@ -1906,6 +1932,8 @@ package body Exp_Prag is
               Right_Opnd => Make_Integer_Literal (Loc, 0)),
           Then_Statements => CG_Stmts);
 
+      Set_Comes_From_Check_Or_Contract (CG_Checks);
+
       --  Detect a possible failure due to several case guards evaluating to
       --  True.
 
@@ -1939,15 +1967,17 @@ package body Exp_Prag is
                            New_Occurrence_Of (Msg_Str, Loc))))))))));
       end if;
 
+      --  Append the checks, but do not analyze them at this point, because
+      --  contracts get potentially expanded as part of a wrapper which gets
+      --  fully analyzed once it is fully formed.
+
       Append_To (Decls, CG_Checks);
-      Analyze (CG_Checks);
 
       --  Once all case guards are evaluated and checked, evaluate any prefixes
       --  of attribute 'Old founds in the selected consequence.
 
       if Present (Old_Evals) then
          Append_To (Decls, Old_Evals);
-         Analyze (Old_Evals);
       end if;
 
       --  Raise Assertion_Error when the corresponding consequence of a case
@@ -1957,6 +1987,47 @@ package body Exp_Prag is
 
       In_Assertion_Expr := In_Assertion_Expr - 1;
    end Expand_Pragma_Contract_Cases;
+
+   -------------------------------------
+   -- Expand_Pragma_Exceptional_Cases --
+   -------------------------------------
+
+   --  Aspect Exceptional_Cases shoule be expanded in the following manner:
+
+   --  Original declaration
+
+   --     procedure P (...) with
+   --        Exceptional_Cases =>
+   --           (Exp_1 => True,
+   --            Exp_2 => Post_4);
+
+   --  Expanded body
+
+   --     procedure P (...) is
+   --     begin
+   --        --  normal body of of P
+   --        declare
+   --        ...
+   --        end;
+   --
+   --     exception
+   --        when Exp1 =>
+   --           pragma Assert (True);
+   --           raise;
+   --        when E : Exp2 =>
+   --           pragma Assert (Post_4);
+   --           raise;
+   --        when others =>
+   --           pragma Assert (False);
+   --           raise;
+   --     end P;
+
+   procedure Expand_Pragma_Exceptional_Cases (Prag : Node_Id) is
+   begin
+      --  Currently we don't expand this pragma
+
+      Rewrite (Prag, Make_Null_Statement (Sloc (Prag)));
+   end Expand_Pragma_Exceptional_Cases;
 
    ---------------------------------------
    -- Expand_Pragma_Import_Or_Interface --

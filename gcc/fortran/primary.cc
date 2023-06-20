@@ -1,5 +1,5 @@
 /* Primary expression subroutines
-   Copyright (C) 2000-2022 Free Software Foundation, Inc.
+   Copyright (C) 2000-2023 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -45,11 +45,11 @@ match_kind_param (int *kind, int *is_iso_c)
 
   *is_iso_c = 0;
 
-  m = gfc_match_small_literal_int (kind, NULL);
+  m = gfc_match_small_literal_int (kind, NULL, false);
   if (m != MATCH_NO)
     return m;
 
-  m = gfc_match_name (name);
+  m = gfc_match_name (name, false);
   if (m != MATCH_YES)
     return m;
 
@@ -95,7 +95,7 @@ get_kind (int *is_iso_c)
 
   *is_iso_c = 0;
 
-  if (gfc_match_char ('_') != MATCH_YES)
+  if (gfc_match_char ('_', false) != MATCH_YES)
     return -2;
 
   m = match_kind_param (&kind, is_iso_c);
@@ -109,10 +109,10 @@ get_kind (int *is_iso_c)
 /* Given a character and a radix, see if the character is a valid
    digit in that radix.  */
 
-int
+bool
 gfc_check_digit (char c, int radix)
 {
-  int r;
+  bool r;
 
   switch (radix)
     {
@@ -586,7 +586,7 @@ match_real_constant (gfc_expr **result, int signflag)
 
   if (c == 'q')
     {
-      if (!gfc_notify_std (GFC_STD_GNU, "exponent-letter 'q' in "
+      if (!gfc_notify_std (GFC_STD_GNU, "exponent-letter %<q%> in "
 			   "real-literal-constant at %C"))
 	return MATCH_ERROR;
       else if (warn_real_q_constant)
@@ -756,8 +756,8 @@ done:
     }
 
   /* Warn about trailing digits which suggest the user added too many
-     trailing digits, which may cause the appearance of higher pecision
-     than the kind kan support.
+     trailing digits, which may cause the appearance of higher precision
+     than the kind can support.
 
      This is done by replacing the rightmost non-zero digit with zero
      and comparing with the original value.  If these are equal, we
@@ -1074,16 +1074,8 @@ match_string_constant (gfc_expr **result)
       c = gfc_next_char ();
     }
 
-  if (c == ' ')
-    {
-      gfc_gobble_whitespace ();
-      c = gfc_next_char ();
-    }
-
   if (c != '_')
     goto no_match;
-
-  gfc_gobble_whitespace ();
 
   c = gfc_next_char ();
   if (c != '\'' && c != '"')
@@ -2078,8 +2070,8 @@ gfc_match_varspec (gfc_expr *primary, int equiv_flag, bool sub_flag,
 	  || (sym->ts.type == BT_CLASS && CLASS_DATA (sym)
 	      && CLASS_DATA (sym)->attr.dimension))
 	{
-	  gfc_error ("Array section designator, e.g. '(:)', is required "
-		     "besides the coarray designator '[...]' at %C");
+	  gfc_error ("Array section designator, e.g. %<(:)%>, is required "
+		     "besides the coarray designator %<[...]%> at %C");
 	  return MATCH_ERROR;
 	}
       if ((sym->ts.type != BT_CLASS && !sym->attr.codimension)
@@ -2648,7 +2640,6 @@ gfc_variable_attr (gfc_expr *expr, gfc_typespec *ts)
       codimension = CLASS_DATA (sym)->attr.codimension;
       pointer = CLASS_DATA (sym)->attr.class_pointer;
       allocatable = CLASS_DATA (sym)->attr.allocatable;
-      optional |= CLASS_DATA (sym)->attr.optional;
     }
   else
     {
@@ -2778,7 +2769,7 @@ gfc_expr_attr (gfc_expr *e)
 	{
 	  gfc_symbol *sym = e->value.function.esym->result;
 	  attr = sym->attr;
-	  if (sym->ts.type == BT_CLASS)
+	  if (sym->ts.type == BT_CLASS && sym->attr.class_ok)
 	    {
 	      attr.dimension = CLASS_DATA (sym)->attr.dimension;
 	      attr.pointer = CLASS_DATA (sym)->attr.class_pointer;
@@ -3069,7 +3060,7 @@ build_actual_constructor (gfc_structure_ctor_component **comp_head,
 		return false;
 	      value = gfc_get_null_expr (&gfc_current_locus);
 	    }
-	  /* ....(Preceeding sentence) If a component with default
+	  /* ....(Preceding sentence) If a component with default
 	     initialization has no corresponding component-data-source, then
 	     the default initialization is applied to that component.  */
 	  else if (comp->initializer)
@@ -3197,10 +3188,11 @@ gfc_convert_to_structure_constructor (gfc_expr *e, gfc_symbol *sym, gfc_expr **c
 	goto cleanup;
 
       /* For a constant string constructor, make sure the length is
-	 correct; truncate of fill with blanks if needed.  */
+	 correct; truncate or fill with blanks if needed.  */
       if (this_comp->ts.type == BT_CHARACTER && !this_comp->attr.allocatable
 	  && this_comp->ts.u.cl && this_comp->ts.u.cl->length
 	  && this_comp->ts.u.cl->length->expr_type == EXPR_CONSTANT
+	  && this_comp->ts.u.cl->length->ts.type == BT_INTEGER
 	  && actual->expr->ts.type == BT_CHARACTER
 	  && actual->expr->expr_type == EXPR_CONSTANT)
 	{
@@ -4084,8 +4076,14 @@ match_variable (gfc_expr **result, int equiv_flag, int host_flag)
 	  gfc_error ("Named constant at %C in an EQUIVALENCE");
 	  return MATCH_ERROR;
 	}
-      /* Otherwise this is checked for and an error given in the
-	 variable definition context checks.  */
+      if (gfc_in_match_data())
+	{
+	  gfc_error ("PARAMETER %qs shall not appear in a DATA statement at %C",
+		      sym->name);
+	  return MATCH_ERROR;
+	}
+	/* Otherwise this is checked for an error given in the
+	   variable definition context checks.  */
       break;
 
     case FL_PROCEDURE:

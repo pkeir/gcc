@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -300,11 +300,9 @@ package body Uintp is
 
       function Better_In_Hex return Boolean is
          T16 : constant Valid_Uint := Uint_2**Int'(16);
-         A   : Valid_Uint;
+         A   : Valid_Uint := UI_Abs (Input);
 
       begin
-         A := UI_Abs (Input);
-
          --  Small values up to 2**16 can always be in decimal
 
          if A < T16 then
@@ -2029,7 +2027,7 @@ package body Uintp is
       begin
          Init_Operand (Left, L_Vec);
          Init_Operand (Right, R_Vec);
-         Neg := (L_Vec (1) < Int_0) xor (R_Vec (1) < Int_0);
+         Neg := L_Vec (1) < Int_0 xor R_Vec (1) < Int_0;
          L_Vec (1) := abs (L_Vec (1));
          R_Vec (1) := abs (R_Vec (1));
 

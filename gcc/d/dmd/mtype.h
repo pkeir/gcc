@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2022 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * https://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -128,6 +128,14 @@ enum VarArgValues
 };
 typedef unsigned char VarArg;
 
+enum class Covariant
+{
+    distinct = 0, /// types are distinct
+    yes = 1,      /// types are covariant
+    no = 2,       /// arguments match as far as overloading goes, but types are not covariant
+    fwdref = 3,   /// cannot determine covariance because of forward references
+};
+
 class Type : public ASTNode
 {
 public:
@@ -213,11 +221,12 @@ public:
     virtual const char *kind();
     Type *copy() const;
     virtual Type *syntaxCopy();
-    bool equals(const RootObject *o) const override;
+    bool equals(const RootObject * const o) const override;
     bool equivalent(Type *t);
     // kludge for template.isType()
     DYNCAST dyncast() const override final { return DYNCAST_TYPE; }
     size_t getUniqueID() const;
+    Covariant covariant(Type *, StorageClass * = NULL, bool = false);
     const char *toChars() const override;
     char *toPrettyChars(bool QualifyTypes = false);
     static void _init();
@@ -302,6 +311,7 @@ public:
     virtual int hasWild() const;
     virtual bool hasPointers();
     virtual bool hasVoidInitPointers();
+    virtual bool hasSystemFields();
     virtual bool hasInvariant();
     virtual Type *nextOf();
     Type *baseElemOf();
@@ -449,6 +459,8 @@ public:
     MATCH implicitConvTo(Type *to) override;
     Expression *defaultInitLiteral(const Loc &loc) override;
     bool hasPointers() override;
+    bool hasSystemFields() override;
+    bool hasVoidInitPointers() override;
     bool hasInvariant() override;
     bool needsDestruction() override;
     bool needsCopyOrPostblit() override;
@@ -560,6 +572,8 @@ public:
                              Expression *defaultArg, UserAttributeDeclaration *userAttribDecl);
     Parameter *syntaxCopy();
     Type *isLazyArray();
+    bool isLazy() const;
+    bool isReference() const;
     // kludge for template.isType()
     DYNCAST dyncast() const override { return DYNCAST_PARAMETER; }
     void accept(Visitor *v) override { v->visit(this); }
@@ -783,6 +797,7 @@ public:
     bool needsNested() override;
     bool hasPointers() override;
     bool hasVoidInitPointers() override;
+    bool hasSystemFields() override;
     bool hasInvariant() override;
     MATCH implicitConvTo(Type *to) override;
     MATCH constConv(Type *to) override;
@@ -821,6 +836,7 @@ public:
     bool isZeroInit(const Loc &loc) override;
     bool hasPointers() override;
     bool hasVoidInitPointers() override;
+    bool hasSystemFields() override;
     bool hasInvariant() override;
     Type *nextOf() override;
 
@@ -866,7 +882,7 @@ public:
     static TypeTuple *create(Type *t1, Type *t2);
     const char *kind() override;
     TypeTuple *syntaxCopy() override;
-    bool equals(const RootObject *o) const override;
+    bool equals(const RootObject * const o) const override;
     void accept(Visitor *v) override { v->visit(this); }
 };
 

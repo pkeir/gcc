@@ -1,5 +1,5 @@
 /* typeinfo.cc -- D runtime type identification.
-   Copyright (C) 2013-2022 Free Software Foundation, Inc.
+   Copyright (C) 2013-2023 Free Software Foundation, Inc.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -180,6 +180,7 @@ make_internal_typeinfo (tinfo_kind tk, Identifier *ident, ...)
 
   /* Create the TypeInfo type.  */
   tree type = make_node (RECORD_TYPE);
+  TYPE_ARTIFICIAL (type) = 1;
   finish_builtin_struct (type, ident->toChars (), fields, NULL_TREE);
 
   tinfo_types[tk] = type;
@@ -243,6 +244,10 @@ make_frontend_typeinfo (Identifier *ident, ClassDeclaration *base = NULL)
 void
 create_tinfo_types (Module *mod)
 {
+  /* Already generated internal types for the object module.  */
+  if (object_module != NULL)
+    return;
+
   /* Build the internal TypeInfo and ClassInfo types.
      See TypeInfoVisitor for documentation of field layout.  */
   make_internal_typeinfo (TK_TYPEINFO_TYPE, Identifier::idPool ("TypeInfo"),
@@ -1049,7 +1054,7 @@ public:
     this->layout_string (ti->deco);
 
     /* Default initializer for struct.  */
-    tree ptr = (sd->zeroInit) ? null_pointer_node
+    tree ptr = (sd->zeroInit ()) ? null_pointer_node
       : build_address (aggregate_initializer_decl (sd));
     this->layout_field (d_array_value (array_type_node,
 				       size_int (sd->structsize), ptr));
@@ -1058,17 +1063,6 @@ public:
     tree xhash = (sd->xhash) ? build_address (get_symbol_decl (sd->xhash))
       : null_pointer_node;
     this->layout_field (xhash);
-
-    if (sd->xhash)
-      {
-	TypeFunction *tf = sd->xhash->type->toTypeFunction ();
-	if (!tf->isnothrow () || tf->trust == TRUST::system)
-	  {
-	    warning (sd->xhash->loc, "toHash() must be declared as "
-		     "extern (D) size_t toHash() const nothrow @safe, "
-		     "not %s", tf->toChars ());
-	  }
-      }
 
     /* bool function(in void*, in void*) xopEquals;  */
     tree xeq = (sd->xeq) ? build_address (get_symbol_decl (sd->xeq))
@@ -1394,21 +1388,29 @@ get_classinfo_decl (ClassDeclaration *decl)
 }
 
 /* Performs sanity checks on the `object.TypeInfo' type, raising an error if
-   RTTI is disabled, or the type is missing.  */
+   RTTI is disabled, or the type is missing.  LOC is the location used for error
+   messages.  SC is the context, and EXPR is expression where TypeInfo is
+   required from, if either are set.  */
 
 void
-check_typeinfo_type (const Loc &loc, Scope *sc)
+check_typeinfo_type (const Loc &loc, Scope *sc, Expression *expr)
 {
   if (!global.params.useTypeInfo)
     {
-      static int warned = 0;
-
       /* Even when compiling without RTTI we should still be able to evaluate
 	 TypeInfo at compile-time, just not at run-time.  */
-      if (!warned && (!sc || !(sc->flags & SCOPEctfe)))
+      if (!sc || !(sc->flags & unsigned(SCOPE::ctfe)))
 	{
-	  error_at (make_location_t (loc),
-		    "%<object.TypeInfo%> cannot be used with %<-fno-rtti%>");
+	  static int warned = 0;
+
+	  if (expr != NULL)
+	    error_at (make_location_t (loc),
+		     "expression %qs requires %<object.TypeInfo%> and cannot "
+		     "be used with %<-fno-rtti%>", expr->toChars ());
+	  else if (!warned)
+	    error_at (make_location_t (loc),
+		      "%<object.TypeInfo%> cannot be used with %<-fno-rtti%>");
+
 	  warned = 1;
 	}
     }
@@ -1429,15 +1431,21 @@ check_typeinfo_type (const Loc &loc, Scope *sc)
     }
 }
 
-/* Returns typeinfo reference for TYPE.  */
+/* Returns typeinfo reference for TYPE.  LOC is the location used for error
+   messages.  EXPR is the expression where TypeInfo is required, if set.  */
 
 tree
-build_typeinfo (const Loc &loc, Type *type)
+build_typeinfo (const Loc &loc, Type *type, Expression *expr)
 {
   gcc_assert (type->ty != TY::Terror);
-  check_typeinfo_type (loc, NULL);
+  check_typeinfo_type (loc, NULL, expr);
   create_typeinfo (type, NULL);
   return build_address (get_typeinfo_decl (type->vtinfo));
+}
+
+tree build_typeinfo (Expression *expr, Type *type)
+{
+  return build_typeinfo (expr->loc, type, expr);
 }
 
 /* Like layout_classinfo, but generates an Object that wraps around a
@@ -1516,10 +1524,12 @@ get_cpp_typeinfo_decl (ClassDeclaration *decl)
   return decl->cpp_type_info_ptr_sym;
 }
 
-/* Get the exact TypeInfo for TYPE, if it doesn't exist, create it.  */
+/* Get the exact TypeInfo for TYPE, if it doesn't exist, create it.
+   When GENERATE is true, push the TypeInfo as a member of MOD so that it will
+   get code generation. */
 
 void
-create_typeinfo (Type *type, Module *mod)
+create_typeinfo (Type *type, Module *mod, bool generate)
 {
   if (!Type::dtypeinfo)
     create_frontend_tinfo_types ();
@@ -1677,7 +1687,7 @@ create_typeinfo (Type *type, Module *mod)
 
       /* If this has a custom implementation in rt/typeinfo, then
 	 do not generate a COMDAT for it.  */
-      if (!builtin_typeinfo_p (t))
+      if (generate && !builtin_typeinfo_p (t))
 	{
 	  /* Find module that will go all the way to an object file.  */
 	  if (mod)
@@ -1756,7 +1766,7 @@ public:
       {
 	if (!ti->needsCodegen ())
 	  {
-	    if (ti->minst || sd->requestTypeInfo)
+	    if (ti->minst || sd->requestTypeInfo ())
 	      return;
 
 	    this->result_ |= true;

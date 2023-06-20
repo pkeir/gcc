@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -70,6 +70,7 @@ package Uintp is
    Uint_80  : constant Uint;
    Uint_127 : constant Uint;
    Uint_128 : constant Uint;
+   Uint_256 : constant Uint;
 
    Uint_Minus_1   : constant Uint;
    Uint_Minus_2   : constant Uint;
@@ -507,6 +508,7 @@ private
    Uint_80  : constant Uint := Uint (Uint_Direct_Bias + 80);
    Uint_127 : constant Uint := Uint (Uint_Direct_Bias + 127);
    Uint_128 : constant Uint := Uint (Uint_Direct_Bias + 128);
+   Uint_256 : constant Uint := Uint (Uint_Direct_Bias + 256);
 
    Uint_Minus_1   : constant Uint := Uint (Uint_Direct_Bias - 1);
    Uint_Minus_2   : constant Uint := Uint (Uint_Direct_Bias - 2);

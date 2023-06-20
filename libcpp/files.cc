@@ -1,5 +1,5 @@
 /* Part of CPP library.  File handling.
-   Copyright (C) 1986-2022 Free Software Foundation, Inc.
+   Copyright (C) 1986-2023 Free Software Foundation, Inc.
    Written by Per Bothner, 1994.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -108,6 +108,10 @@ struct _cpp_file
 
   /* If this file is implicitly preincluded.  */
   bool implicit_preinclude : 1;
+
+  /* Set if a header wasn't found with __has_include or __has_include_next
+     and error should be emitted if it is included normally.  */
+  bool deferred_error : 1;
 
   /* > 0: Known C++ Module header unit, <0: known not.  ==0, unknown  */
   int header_unit : 2;
@@ -523,7 +527,14 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir,
   cpp_file_hash_entry *entry
     = search_cache ((struct cpp_file_hash_entry *) *hash_slot, start_dir);
   if (entry)
-    return entry->u.file;
+    {
+      if (entry->u.file->deferred_error && kind == _cpp_FFK_NORMAL)
+	{
+	  open_file_failed (pfile, entry->u.file, angle_brackets, loc);
+	  entry->u.file->deferred_error = false;
+	}
+      return entry->u.file;
+    }
 
   _cpp_file *file = make_cpp_file (start_dir, fname);
   file->implicit_preinclude
@@ -589,6 +600,8 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir,
 
 	    if (kind != _cpp_FFK_HAS_INCLUDE)
 	      open_file_failed (pfile, file, angle_brackets, loc);
+	    else
+	      file->deferred_error = true;
 	    break;
 	  }
 
@@ -1833,7 +1846,7 @@ remap_filename (cpp_reader *pfile, _cpp_file *file)
 #ifdef HAVE_DOS_BASED_FILE_SYSTEM
       {
 	const char *p2 = strchr (fname, '\\');
-	if (!p || (p > p2))
+	if (!p || (p2 && p > p2))
 	  p = p2;
       }
 #endif

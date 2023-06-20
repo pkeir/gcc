@@ -1,5 +1,5 @@
 /* IRA conflict builder.
-   Copyright (C) 2006-2022 Free Software Foundation, Inc.
+   Copyright (C) 2006-2023 Free Software Foundation, Inc.
    Contributed by Vladimir Makarov <vmakarov@redhat.com>.
 
 This file is part of GCC.
@@ -397,6 +397,9 @@ can_use_same_reg_p (rtx_insn *insn, int output, int input)
 	= &recog_op_alt[nalt * recog_data.n_operands];
       if (op_alt[input].matches == output)
 	return true;
+
+      if (op_alt[output].earlyclobber)
+	continue;
 
       if (ira_reg_class_intersect[op_alt[input].cl][op_alt[output].cl]
 	  != NO_REGS)

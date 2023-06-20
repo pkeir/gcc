@@ -1,5 +1,5 @@
 /* Functions dealing with attribute handling, used by most front ends.
-   Copyright (C) 1992-2022 Free Software Foundation, Inc.
+   Copyright (C) 1992-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -251,6 +251,7 @@ handle_ignored_attributes_option (vec<char *> *v)
       /* We don't accept '::attr'.  */
       if (cln == nullptr || cln == opt)
 	{
+	  auto_diagnostic_group d;
 	  error ("wrong argument to ignored attributes");
 	  inform (input_location, "valid format is %<ns::attr%> or %<ns::%>");
 	  continue;
@@ -525,7 +526,7 @@ diag_attr_exclusions (tree last_decl, tree node, tree attrname,
 	    continue;
 
 	  if ((TREE_CODE (node) == FIELD_DECL
-	       || TREE_CODE (node) == VAR_DECL)
+	       || VAR_P (node))
 	      && !excl->variable)
 	    continue;
 
@@ -732,10 +733,14 @@ decl_attributes (tree *node, tree attributes, int flags,
 	      || (spec->max_length >= 0
 		  && nargs > spec->max_length))
 	    {
+	      auto_diagnostic_group d;
 	      error ("wrong number of arguments specified for %qE attribute",
 		     name);
 	      if (spec->max_length < 0)
 		inform (input_location, "expected %i or more, found %i",
+			spec->min_length, nargs);
+	      else if (spec->min_length == spec->max_length)
+		inform (input_location, "expected %i, found %i",
 			spec->min_length, nargs);
 	      else
 		inform (input_location, "expected between %i and %i, found %i",
@@ -778,8 +783,7 @@ decl_attributes (tree *node, tree attributes, int flags,
 	  && TREE_CODE (*anode) != METHOD_TYPE)
 	{
 	  if (TREE_CODE (*anode) == POINTER_TYPE
-	      && (TREE_CODE (TREE_TYPE (*anode)) == FUNCTION_TYPE
-		  || TREE_CODE (TREE_TYPE (*anode)) == METHOD_TYPE))
+	      && FUNC_OR_METHOD_TYPE_P (TREE_TYPE (*anode)))
 	    {
 	      /* OK, this is a bit convoluted.  We can't just make a copy
 		 of the pointer type and modify its TREE_TYPE, because if
@@ -815,7 +819,7 @@ decl_attributes (tree *node, tree attributes, int flags,
 
       if (TYPE_P (*anode)
 	  && (flags & (int) ATTR_FLAG_TYPE_IN_PLACE)
-	  && TYPE_SIZE (*anode) != NULL_TREE)
+	  && COMPLETE_TYPE_P (*anode))
 	{
 	  warning (OPT_Wattributes, "type attributes ignored after type is already defined");
 	  continue;
@@ -841,6 +845,7 @@ decl_attributes (tree *node, tree attributes, int flags,
 	      || !DECL_P (*anode)
 	      || DECL_BUILT_IN_CLASS (*anode) != BUILT_IN_NORMAL
 	      || (DECL_FUNCTION_CODE (*anode) != BUILT_IN_UNREACHABLE
+		  && DECL_FUNCTION_CODE (*anode) != BUILT_IN_UNREACHABLE_TRAP
 		  && (DECL_FUNCTION_CODE (*anode)
 		      != BUILT_IN_UBSAN_HANDLE_BUILTIN_UNREACHABLE)))
 	    {
@@ -1164,6 +1169,7 @@ common_function_versions (tree fn1, tree fn2)
 	      std::swap (fn1, fn2);
 	      attr1 = attr2;
 	    }
+	  auto_diagnostic_group d;
 	  error_at (DECL_SOURCE_LOCATION (fn2),
 		    "missing %<target%> attribute for multi-versioned %qD",
 		    fn2);
@@ -1271,9 +1277,7 @@ build_type_attribute_qual_variant (tree otype, tree attribute, int quals)
 	 build_duplicate_type is another solution (as used in
 	 handle_transparent_union_attribute), but that doesn't play well
 	 with the stronger C++ type identity model.  */
-      if (TREE_CODE (ttype) == RECORD_TYPE
-	  || TREE_CODE (ttype) == UNION_TYPE
-	  || TREE_CODE (ttype) == QUAL_UNION_TYPE
+      if (RECORD_OR_UNION_TYPE_P (ttype)
 	  || TREE_CODE (ttype) == ENUMERAL_TYPE)
 	{
 	  warning (OPT_Wattributes,
@@ -1634,6 +1638,33 @@ remove_attribute (const char *attr_name, tree list)
 	*p = TREE_CHAIN (l);
       else
 	p = &TREE_CHAIN (l);
+    }
+
+  return list;
+}
+
+/* Similarly but also match namespace on the removed attributes.
+   ATTR_NS "" stands for NULL or "gnu" namespace.  */
+
+tree
+remove_attribute (const char *attr_ns, const char *attr_name, tree list)
+{
+  tree *p;
+  gcc_checking_assert (attr_name[0] != '_');
+  gcc_checking_assert (attr_ns == NULL || attr_ns[0] != '_');
+
+  for (p = &list; *p;)
+    {
+      tree l = *p;
+
+      tree attr = get_attribute_name (l);
+      if (is_attribute_p (attr_name, attr)
+	  && is_attribute_namespace_p (attr_ns, l))
+	{
+	  *p = TREE_CHAIN (l);
+	  continue;
+	}
+      p = &TREE_CHAIN (l);
     }
 
   return list;
@@ -2030,6 +2061,45 @@ private_lookup_attribute (const char *attr_name, size_t attr_len, tree list)
       if (cmp_attribs (attr_name, attr_len, IDENTIFIER_POINTER (attr),
 		       ident_len))
 	break;
+      list = TREE_CHAIN (list);
+    }
+
+  return list;
+}
+
+/* Similarly but with also attribute namespace.  */
+
+tree
+private_lookup_attribute (const char *attr_ns, const char *attr_name,
+			  size_t attr_ns_len, size_t attr_len, tree list)
+{
+  while (list)
+    {
+      tree attr = get_attribute_name (list);
+      size_t ident_len = IDENTIFIER_LENGTH (attr);
+      if (cmp_attribs (attr_name, attr_len, IDENTIFIER_POINTER (attr),
+		       ident_len))
+	{
+	  tree ns = get_attribute_namespace (list);
+	  if (ns == NULL_TREE)
+	    {
+	      if (attr_ns_len == 0)
+		break;
+	    }
+	  else if (attr_ns)
+	    {
+	      ident_len = IDENTIFIER_LENGTH (ns);
+	      if (attr_ns_len == 0)
+		{
+		  if (cmp_attribs ("gnu", strlen ("gnu"),
+				   IDENTIFIER_POINTER (ns), ident_len))
+		    break;
+		}
+	      else if (cmp_attribs (attr_ns, attr_ns_len,
+				    IDENTIFIER_POINTER (ns), ident_len))
+		break;
+	    }
+	}
       list = TREE_CHAIN (list);
     }
 

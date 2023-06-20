@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2022 Free Software Foundation, Inc.
+/* Copyright (C) 2016-2023 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -27,6 +27,12 @@ enum processor_type
   PROCESSOR_GFX90a
 };
 
+#define TARGET_FIJI (gcn_arch == PROCESSOR_FIJI)
+#define TARGET_VEGA10 (gcn_arch == PROCESSOR_VEGA10)
+#define TARGET_VEGA20 (gcn_arch == PROCESSOR_VEGA20)
+#define TARGET_GFX908 (gcn_arch == PROCESSOR_GFX908)
+#define TARGET_GFX90a (gcn_arch == PROCESSOR_GFX90a)
+
 /* Set in gcn_option_override.  */
 extern enum gcn_isa {
   ISA_UNKNOWN,
@@ -48,11 +54,13 @@ extern enum gcn_isa {
 #define TARGET_M0_LDS_LIMIT (TARGET_GCN3)
 #define TARGET_PACKED_WORK_ITEMS (TARGET_CDNA2_PLUS)
 
-enum sram_ecc_type
+#define TARGET_XNACK (flag_xnack != HSACO_ATTR_OFF)
+
+enum hsaco_attr_type
 {
-  SRAM_ECC_OFF,
-  SRAM_ECC_ON,
-  SRAM_ECC_ANY
+  HSACO_ATTR_OFF,
+  HSACO_ATTR_ON,
+  HSACO_ATTR_ANY
 };
 
 #endif

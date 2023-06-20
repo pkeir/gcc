@@ -1,5 +1,5 @@
 /* Internals of libgccjit: classes for recording calls made to the JIT API.
-   Copyright (C) 2013-2022 Free Software Foundation, Inc.
+   Copyright (C) 2013-2023 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -25,7 +25,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "pretty-print.h"
 #include "toplev.h"
 
-#include <pthread.h>
 
 #include "jit-builtins.h"
 #include "jit-recording.h"
@@ -5837,7 +5836,8 @@ recording::comparison::replay_into (replayer *r)
   set_playback_obj (r->new_comparison (playback_location (r, m_loc),
 				       m_op,
 				       m_a->playback_rvalue (),
-				       m_b->playback_rvalue ()));
+				       m_b->playback_rvalue (),
+				       m_type->playback_type ()));
 }
 
 /* Implementation of pure virtual hook recording::rvalue::visit_children

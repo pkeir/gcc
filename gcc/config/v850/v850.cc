@@ -1,5 +1,5 @@
 /* Subroutines for insn-output.cc for NEC V850 series
-   Copyright (C) 1996-2022 Free Software Foundation, Inc.
+   Copyright (C) 1996-2023 Free Software Foundation, Inc.
    Contributed by Jeff Law (law@cygnus.com).
 
    This file is part of GCC.
@@ -2161,7 +2161,7 @@ v850_encode_section_info (tree decl, rtx rtl, int first)
 {
   default_encode_section_info (decl, rtl, first);
 
-  if (TREE_CODE (decl) == VAR_DECL
+  if (VAR_P (decl)
       && (TREE_STATIC (decl) || DECL_EXTERNAL (decl)))
     v850_encode_data_area (decl, XEXP (rtl, 0));
 }
@@ -2482,7 +2482,7 @@ v850_insert_attributes (tree decl, tree * attr_ptr ATTRIBUTE_UNUSED )
   if (data_area_stack
       && data_area_stack->data_area
       && current_function_decl == NULL_TREE
-      && (TREE_CODE (decl) == VAR_DECL || TREE_CODE (decl) == CONST_DECL)
+      && (VAR_P (decl) || TREE_CODE (decl) == CONST_DECL)
       && v850_get_data_area (decl) == DATA_AREA_NORMAL)
     v850_set_data_area (decl, data_area_stack->data_area);
 
@@ -2508,7 +2508,7 @@ v850_insert_attributes (tree decl, tree * attr_ptr ATTRIBUTE_UNUSED )
     }
   
   if (current_function_decl == NULL_TREE
-      && (TREE_CODE (decl) == VAR_DECL
+      && (VAR_P (decl)
 	  || TREE_CODE (decl) == CONST_DECL
 	  || TREE_CODE (decl) == FUNCTION_DECL)
       && (!DECL_EXTERNAL (decl) || DECL_INITIAL (decl))
@@ -2865,7 +2865,6 @@ v850_select_section (tree exp,
     {
       int is_const;
       if (!TREE_READONLY (exp)
-	  || TREE_SIDE_EFFECTS (exp)
 	  || !DECL_INITIAL (exp)
 	  || (DECL_INITIAL (exp) != error_mark_node
 	      && !TREE_CONSTANT (DECL_INITIAL (exp))))

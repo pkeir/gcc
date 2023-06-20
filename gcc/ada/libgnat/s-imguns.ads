@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -56,22 +56,10 @@ is
    subtype Unsigned is Unsigned_Types.Unsigned;
 
    package Impl is new Image_U
-     (Uns                                => Unsigned,
-      Uns_Option                         => Val_Uns.Impl.Uns_Option,
-      Unsigned_Width_Ghost               =>
+     (Uns                  => Unsigned,
+      Unsigned_Width_Ghost =>
          Wid_Uns.Width_Unsigned (0, Unsigned'Last),
-      Only_Decimal_Ghost                 => Val_Uns.Impl.Only_Decimal_Ghost,
-      Hexa_To_Unsigned_Ghost             =>
-         Val_Uns.Impl.Hexa_To_Unsigned_Ghost,
-      Wrap_Option                        => Val_Uns.Impl.Wrap_Option,
-      Scan_Based_Number_Ghost            =>
-         Val_Uns.Impl.Scan_Based_Number_Ghost,
-      Is_Unsigned_Ghost                  => Val_Uns.Impl.Is_Unsigned_Ghost,
-      Value_Unsigned                     => Val_Uns.Impl.Value_Unsigned,
-      Prove_Iter_Scan_Based_Number_Ghost =>
-         Val_Uns.Impl.Prove_Iter_Scan_Based_Number_Ghost,
-      Prove_Scan_Only_Decimal_Ghost      =>
-         Val_Uns.Impl.Prove_Scan_Only_Decimal_Ghost);
+      Uns_Params           => System.Val_Uns.Impl.Spec.Uns_Params);
 
    procedure Image_Unsigned
      (V : Unsigned;

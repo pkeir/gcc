@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2022 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2023 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
 
@@ -269,8 +269,7 @@ free_format_data (format_data *fmt)
        fnp->format != FMT_NONE; fnp++)
     if (fnp->format == FMT_DT)
 	{
-	  if (GFC_DESCRIPTOR_DATA(fnp->u.udf.vlist))
-	    free (GFC_DESCRIPTOR_DATA(fnp->u.udf.vlist));
+	  free (GFC_DESCRIPTOR_DATA(fnp->u.udf.vlist));
 	  free (fnp->u.udf.vlist);
 	}
 

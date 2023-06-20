@@ -1,5 +1,5 @@
 /* Subroutines used for code generation on the Synopsys DesignWare ARC cpu.
-   Copyright (C) 1994-2022 Free Software Foundation, Inc.
+   Copyright (C) 1994-2023 Free Software Foundation, Inc.
 
    Sources derived from work done by Sankhya Technologies (www.sankhya.com) on
    behalf of Synopsys Inc.
@@ -68,6 +68,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "alias.h"
 #include "opts.h"
 #include "hw-doloop.h"
+#include "targhooks.h"
+#include "case-cfn-macros.h"
 
 /* Which cpu we're compiling for (ARC600, ARC601, ARC700).  */
 static char arc_cpu_name[10] = "";
@@ -646,8 +648,8 @@ arc_sched_issue_rate (void)
 {
   switch (arc_tune)
     {
-    case TUNE_ARCHS4X:
-    case TUNE_ARCHS4XD:
+    case ARC_TUNE_ARCHS4X:
+    case ARC_TUNE_ARCHS4XD:
       return 3;
     default:
       break;
@@ -1458,6 +1460,12 @@ arc_override_options (void)
   if (!OPTION_SET_P (unaligned_access) && TARGET_HS)
     unaligned_access = 1;
 
+  if (TARGET_HS && (arc_tune == ARC_TUNE_ARCHS4X_REL31A))
+    {
+      TARGET_CODE_DENSITY_FRAME = 0;
+      flag_delayed_branch = 0;
+    }
+
   /* These need to be done at start up.  It's convenient to do them here.  */
   arc_init ();
 }
@@ -1879,7 +1887,7 @@ arc_init_reg_tables (void)
    Because mlo / mhi form a 64 bit value, we use different gcc internal
    register numbers to make them form a register pair as the gcc internals
    know it.  mmid gets number 57, if still available, and mlo / mhi get
-   number 58 and 59, depending on endianness.  We use DBX_REGISTER_NUMBER
+   number 58 and 59, depending on endianness.  We use DEBUGGER_REGNO
    to map this back.  */
   char rname56[5] = "r56";
   char rname57[5] = "r57";
@@ -2444,7 +2452,8 @@ arc_setup_incoming_varargs (cumulative_args_t args_so_far,
   /* We must treat `__builtin_va_alist' as an anonymous arg.  */
 
   next_cum = *get_cumulative_args (args_so_far);
-  arc_function_arg_advance (pack_cumulative_args (&next_cum), arg);
+  if (!TYPE_NO_NAMED_ARGS_STDARG_P (TREE_TYPE (current_function_decl)))
+    arc_function_arg_advance (pack_cumulative_args (&next_cum), arg);
   first_anon_arg = next_cum;
 
   if (FUNCTION_ARG_REGNO_P (first_anon_arg))
@@ -2468,6 +2477,20 @@ arc_setup_incoming_varargs (cumulative_args_t args_so_far,
     }
 }
 
+/* Return TRUE if reg is ok for short instrcutions.  */
+
+static bool
+arc_check_short_reg_p (rtx op)
+{
+  if (!REG_P (op))
+    return false;
+
+  if (IN_RANGE (REGNO (op) ^ 4, 4, 11))
+    return true;
+
+  return false;
+}
+
 /* Cost functions.  */
 
 /* Provide the costs of an addressing mode that contains ADDR.
@@ -2479,7 +2502,7 @@ arc_address_cost (rtx addr, machine_mode, addr_space_t, bool speed)
   switch (GET_CODE (addr))
     {
     case REG :
-      return speed || satisfies_constraint_Rcq (addr) ? 0 : 1;
+      return speed || arc_check_short_reg_p (addr) ? 0 : 1;
     case PRE_INC: case PRE_DEC: case POST_INC: case POST_DEC:
     case PRE_MODIFY: case POST_MODIFY:
       return !speed;
@@ -2511,14 +2534,14 @@ arc_address_cost (rtx addr, machine_mode, addr_space_t, bool speed)
 		    ? COSTS_N_INSNS (1)
 		    : speed
 		    ? 0
-		    : (satisfies_constraint_Rcq (plus0)
+		    : (arc_check_short_reg_p (plus0)
 		       && satisfies_constraint_O (plus1))
 		    ? 0
 		    : 1);
 	  case REG:
 	    return (speed < 1 ? 0
-		    : (satisfies_constraint_Rcq (plus0)
-		       && satisfies_constraint_Rcq (plus1))
+		    : (arc_check_short_reg_p (plus0)
+		       && arc_check_short_reg_p (plus1))
 		    ? 0 : 1);
 	  case CONST :
 	  case SYMBOL_REF :
@@ -3350,7 +3373,7 @@ arc_save_callee_enter (uint64_t gmask,
       reg = gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM);
       mem = gen_frame_mem (Pmode, plus_constant (Pmode,
 						 stack_pointer_rtx,
-						 off));
+						 -off));
       XVECEXP (insn, 0, indx) = gen_rtx_SET (mem, reg);
       RTX_FRAME_RELATED_P (XVECEXP (insn, 0, indx++)) = 1;
       off -= UNITS_PER_WORD;
@@ -3364,7 +3387,7 @@ arc_save_callee_enter (uint64_t gmask,
       reg = gen_rtx_REG (SImode, regno);
       mem = gen_frame_mem (SImode, plus_constant (Pmode,
 						  stack_pointer_rtx,
-						  off));
+						  -off));
       XVECEXP (insn, 0, indx) = gen_rtx_SET (mem, reg);
       RTX_FRAME_RELATED_P (XVECEXP (insn, 0, indx)) = 1;
       gmask = gmask & ~(1ULL << regno);
@@ -3374,7 +3397,7 @@ arc_save_callee_enter (uint64_t gmask,
     {
       mem = gen_frame_mem (Pmode, plus_constant (Pmode,
 						 stack_pointer_rtx,
-						 off));
+						 -off));
       XVECEXP (insn, 0, indx) = gen_rtx_SET (mem, hard_frame_pointer_rtx);
       RTX_FRAME_RELATED_P (XVECEXP (insn, 0, indx++)) = 1;
       off -= UNITS_PER_WORD;
@@ -3965,7 +3988,7 @@ arc_expand_epilogue (int sibcall_p)
   if (size)
     emit_insn (gen_blockage ());
 
-  if (ARC_INTERRUPT_P (fn_type) && restore_fp)
+  if (ARC_INTERRUPT_P (fn_type))
     {
       /* We need to restore FP before any SP operation in an
 	 interrupt.  */
@@ -5761,7 +5784,7 @@ arc_encode_section_info (tree decl, rtx rtl, int first)
 
       SYMBOL_REF_FLAGS (symbol) = flags;
     }
-  else if (TREE_CODE (decl) == VAR_DECL)
+  else if (VAR_P (decl))
     {
       rtx symbol = XEXP (rtl, 0);
 
@@ -6234,8 +6257,6 @@ arc_call_tls_get_addr (rtx ti)
   return ret;
 }
 
-#define DTPOFF_ZERO_SYM ".tdata"
-
 /* Return a legitimized address for ADDR,
    which is a SYMBOL_REF with tls_model MODEL.  */
 
@@ -6244,36 +6265,16 @@ arc_legitimize_tls_address (rtx addr, enum tls_model model)
 {
   rtx tmp;
 
-  if (!flag_pic && model == TLS_MODEL_LOCAL_DYNAMIC)
-    model = TLS_MODEL_LOCAL_EXEC;
-
-
   /* The TP pointer needs to be set.  */
   gcc_assert (arc_tp_regno != -1);
 
   switch (model)
     {
     case TLS_MODEL_GLOBAL_DYNAMIC:
+    case TLS_MODEL_LOCAL_DYNAMIC:
       tmp = gen_reg_rtx (Pmode);
       emit_move_insn (tmp, arc_unspec_offset (addr, UNSPEC_TLS_GD));
       return arc_call_tls_get_addr (tmp);
-
-    case TLS_MODEL_LOCAL_DYNAMIC:
-      rtx base;
-      tree decl;
-      const char *base_name;
-
-      decl = SYMBOL_REF_DECL (addr);
-      base_name = DTPOFF_ZERO_SYM;
-      if (decl && bss_initializer_p (decl))
-	base_name = ".tbss";
-
-      base = gen_rtx_SYMBOL_REF (Pmode, base_name);
-      tmp = gen_reg_rtx (Pmode);
-      emit_move_insn (tmp, arc_unspec_offset (base, UNSPEC_TLS_GD));
-      base = arc_call_tls_get_addr (tmp);
-      return gen_rtx_PLUS (Pmode, force_reg (Pmode, base),
-			   arc_unspec_offset (addr, UNSPEC_TLS_OFF));
 
     case TLS_MODEL_INITIAL_EXEC:
       addr = arc_unspec_offset (addr, UNSPEC_TLS_IE);
@@ -7817,6 +7818,115 @@ arc_store_addr_hazard_p (rtx_insn* producer, rtx_insn* consumer)
   return arc_store_addr_hazard_internal_p (producer, consumer);
 }
 
+/* Return length adjustment for INSN.
+   For ARC600:
+   A write to a core reg greater or equal to 32 must not be immediately
+   followed by a use.  Anticipate the length requirement to insert a nop
+   between PRED and SUCC to prevent a hazard.  */
+
+static int
+arc600_corereg_hazard (rtx_insn *pred, rtx_insn *succ)
+{
+  if (!TARGET_ARC600)
+    return 0;
+  if (GET_CODE (PATTERN (pred)) == SEQUENCE)
+    pred = as_a <rtx_sequence *> (PATTERN (pred))->insn (1);
+  if (GET_CODE (PATTERN (succ)) == SEQUENCE)
+    succ = as_a <rtx_sequence *> (PATTERN (succ))->insn (0);
+  if (recog_memoized (pred) == CODE_FOR_mulsi_600
+      || recog_memoized (pred) == CODE_FOR_umul_600
+      || recog_memoized (pred) == CODE_FOR_mac_600
+      || recog_memoized (pred) == CODE_FOR_mul64_600
+      || recog_memoized (pred) == CODE_FOR_mac64_600
+      || recog_memoized (pred) == CODE_FOR_umul64_600
+      || recog_memoized (pred) == CODE_FOR_umac64_600)
+    return 0;
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, PATTERN (pred), NONCONST)
+    {
+      const_rtx x = *iter;
+      switch (GET_CODE (x))
+	{
+	case SET: case POST_INC: case POST_DEC: case PRE_INC: case PRE_DEC:
+	  break;
+	default:
+	  /* This is also fine for PRE/POST_MODIFY, because they
+	     contain a SET.  */
+	  continue;
+	}
+      rtx dest = XEXP (x, 0);
+      /* Check if this sets a an extension register.  N.B. we use 61 for the
+	 condition codes, which is definitely not an extension register.  */
+      if (REG_P (dest) && REGNO (dest) >= 32 && REGNO (dest) < 61
+	  /* Check if the same register is used by the PAT.  */
+	  && (refers_to_regno_p
+	      (REGNO (dest),
+	       REGNO (dest) + (GET_MODE_SIZE (GET_MODE (dest)) + 3) / 4U,
+	       PATTERN (succ), 0)))
+	return 4;
+    }
+  return 0;
+}
+
+/* For ARC600:
+   A write to a core reg greater or equal to 32 must not be immediately
+   followed by a use.  Anticipate the length requirement to insert a nop
+   between PRED and SUCC to prevent a hazard.  */
+
+int
+arc_hazard (rtx_insn *pred, rtx_insn *succ)
+{
+  if (!pred || !INSN_P (pred) || !succ || !INSN_P (succ))
+    return 0;
+
+  if (TARGET_ARC600)
+    return arc600_corereg_hazard (pred, succ);
+
+  return 0;
+}
+
+/* When compiling for release 310a, insert a nop before any
+   conditional jump.  */
+
+static int
+arc_check_release31a (rtx_insn *pred, rtx_insn *succ)
+{
+  if (!pred || !INSN_P (pred) || !succ || !INSN_P (succ))
+    return 0;
+
+  if (!JUMP_P (pred) && !single_set (pred))
+    return 0;
+
+  if (!JUMP_P (succ) && !single_set (succ))
+    return 0;
+
+  if (TARGET_HS && (arc_tune == ARC_TUNE_ARCHS4X_REL31A))
+    switch (get_attr_type (pred))
+      {
+      case TYPE_STORE:
+	switch (get_attr_type (succ))
+	  {
+	  case TYPE_BRCC:
+	  case TYPE_BRCC_NO_DELAY_SLOT:
+	  case TYPE_LOOP_END:
+	    return 1;
+	  default:
+	    break;
+	  }
+	break;
+      case TYPE_BRCC:
+      case TYPE_BRCC_NO_DELAY_SLOT:
+      case TYPE_LOOP_END:
+	if (get_attr_type (succ) == TYPE_STORE)
+	  return 1;
+	break;
+      default:
+	break;
+      }
+
+  return 0;
+}
+
 /* The same functionality as arc_hazard.  It is called in machine
    reorg before any other optimization.  Hence, the NOP size is taken
    into account when doing branch shortening.  */
@@ -7830,10 +7940,8 @@ workaround_arc_anomaly (void)
   for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
     {
       succ0 = next_real_insn (insn);
-      if (arc_hazard (insn, succ0))
-	{
-	  emit_insn_before (gen_nopv (), succ0);
-	}
+      if (arc_hazard (insn, succ0) || arc_check_release31a (insn, succ0))
+	emit_insn_before (gen_nopv (), succ0);
     }
 
   if (!TARGET_ARC700)
@@ -8805,7 +8913,7 @@ arc_is_aux_reg_p (rtx pat)
     return false;
 
   /* Get the attributes.  */
-  if (TREE_CODE (addr) == VAR_DECL)
+  if (VAR_P (addr))
     attrs = DECL_ATTRIBUTES (addr);
   else if (TREE_CODE (addr) == MEM_REF)
     attrs = TYPE_ATTRIBUTES (TREE_TYPE (TREE_OPERAND (addr, 0)));
@@ -8890,8 +8998,8 @@ arc_output_addsi (rtx *operands, bool cond_p, bool output_p)
   int intval = (REG_P (operands[2]) ? 1
 		: CONST_INT_P (operands[2]) ? INTVAL (operands[2]) : 0xbadc057);
   int neg_intval = -intval;
-  int short_0 = satisfies_constraint_Rcq (operands[0]);
-  int short_p = (!cond_p && short_0 && satisfies_constraint_Rcq (operands[1]));
+  int short_0 = arc_check_short_reg_p (operands[0]);
+  int short_p = (!cond_p && short_0 && arc_check_short_reg_p (operands[1]));
   int ret = 0;
 
 #define REG_H_P(OP) (REG_P (OP) && ((TARGET_V2 && REGNO (OP) <= 31	\
@@ -8924,7 +9032,7 @@ arc_output_addsi (rtx *operands, bool cond_p, bool output_p)
 	 patterns.  */
       if (short_p
 	  && ((REG_H_P (operands[2])
-	       && (match || satisfies_constraint_Rcq (operands[2])))
+	       && (match || arc_check_short_reg_p (operands[2])))
 	      || (CONST_INT_P (operands[2])
 		  && ((unsigned) intval <= (match ? 127 : 7)))))
 	ADDSI_OUTPUT1 ("add%? %0,%1,%2 ;1");
@@ -8951,7 +9059,7 @@ arc_output_addsi (rtx *operands, bool cond_p, bool output_p)
       /* Generate add_s r0,b,u6; add_s r1,b,u6 patterns.  */
       if (TARGET_CODE_DENSITY && REG_P (operands[0]) && REG_P (operands[1])
 	  && ((REGNO (operands[0]) == 0) || (REGNO (operands[0]) == 1))
-	  && satisfies_constraint_Rcq (operands[1])
+	  && arc_check_short_reg_p (operands[1])
 	  && satisfies_constraint_L (operands[2]))
 	ADDSI_OUTPUT1 ("add%? %0,%1,%2 ;6");
     }
@@ -9324,56 +9432,6 @@ disi_highpart (rtx in)
   return simplify_gen_subreg (SImode, in, DImode, TARGET_BIG_ENDIAN ? 0 : 4);
 }
 
-/* Return length adjustment for INSN.
-   For ARC600:
-   A write to a core reg greater or equal to 32 must not be immediately
-   followed by a use.  Anticipate the length requirement to insert a nop
-   between PRED and SUCC to prevent a hazard.  */
-
-static int
-arc600_corereg_hazard (rtx_insn *pred, rtx_insn *succ)
-{
-  if (!TARGET_ARC600)
-    return 0;
-  if (GET_CODE (PATTERN (pred)) == SEQUENCE)
-    pred = as_a <rtx_sequence *> (PATTERN (pred))->insn (1);
-  if (GET_CODE (PATTERN (succ)) == SEQUENCE)
-    succ = as_a <rtx_sequence *> (PATTERN (succ))->insn (0);
-  if (recog_memoized (pred) == CODE_FOR_mulsi_600
-      || recog_memoized (pred) == CODE_FOR_umul_600
-      || recog_memoized (pred) == CODE_FOR_mac_600
-      || recog_memoized (pred) == CODE_FOR_mul64_600
-      || recog_memoized (pred) == CODE_FOR_mac64_600
-      || recog_memoized (pred) == CODE_FOR_umul64_600
-      || recog_memoized (pred) == CODE_FOR_umac64_600)
-    return 0;
-  subrtx_iterator::array_type array;
-  FOR_EACH_SUBRTX (iter, array, PATTERN (pred), NONCONST)
-    {
-      const_rtx x = *iter;
-      switch (GET_CODE (x))
-	{
-	case SET: case POST_INC: case POST_DEC: case PRE_INC: case PRE_DEC:
-	  break;
-	default:
-	  /* This is also fine for PRE/POST_MODIFY, because they
-	     contain a SET.  */
-	  continue;
-	}
-      rtx dest = XEXP (x, 0);
-      /* Check if this sets an extension register.  N.B. we use 61 for the
-	 condition codes, which is definitely not an extension register.  */
-      if (REG_P (dest) && REGNO (dest) >= 32 && REGNO (dest) < 61
-	  /* Check if the same register is used by the PAT.  */
-	  && (refers_to_regno_p
-	      (REGNO (dest),
-	       REGNO (dest) + (GET_MODE_SIZE (GET_MODE (dest)) + 3) / 4U,
-	       PATTERN (succ), 0)))
-	return 4;
-    }
-  return 0;
-}
-
 /* Given a rtx, check if it is an assembly instruction or not.  */
 
 static int
@@ -9404,23 +9462,6 @@ arc_asm_insn_p (rtx x)
     default:
       break;
     }
-
-  return 0;
-}
-
-/* For ARC600:
-   A write to a core reg greater or equal to 32 must not be immediately
-   followed by a use.  Anticipate the length requirement to insert a nop
-   between PRED and SUCC to prevent a hazard.  */
-
-int
-arc_hazard (rtx_insn *pred, rtx_insn *succ)
-{
-  if (!pred || !INSN_P (pred) || !succ || !INSN_P (succ))
-    return 0;
-
-  if (TARGET_ARC600)
-    return arc600_corereg_hazard (pred, succ);
 
   return 0;
 }
@@ -9987,7 +10028,7 @@ split_addsi (rtx *operands)
   /* Try for two short insns first.  Lengths being equal, we prefer
      expansions with shorter register lifetimes.  */
   if (val > 127 && val <= 255
-      && satisfies_constraint_Rcq (operands[0]))
+      && arc_check_short_reg_p (operands[0]))
     {
       operands[3] = operands[2];
       operands[4] = gen_rtx_PLUS (SImode, operands[0], operands[1]);
@@ -10011,8 +10052,8 @@ split_subsi (rtx *operands)
 
   /* Try for two short insns first.  Lengths being equal, we prefer
      expansions with shorter register lifetimes.  */
-  if (satisfies_constraint_Rcq (operands[0])
-      && satisfies_constraint_Rcq (operands[2]))
+  if (arc_check_short_reg_p (operands[0])
+      && arc_check_short_reg_p (operands[2]))
     {
       if (val >= -31 && val <= 127)
 	{
@@ -10390,12 +10431,12 @@ arc_lra_p (void)
   return arc_lra_flag;
 }
 
-/* ??? Should we define TARGET_REGISTER_PRIORITY?  We might perfer to use
-   Rcq registers, because some insn are shorter with them.  OTOH we already
-   have separate alternatives for this purpose, and other insns don't
-   mind, so maybe we should rather prefer the other registers?
-   We need more data, and we can only get that if we allow people to
-   try all options.  */
+/* ??? Should we define TARGET_REGISTER_PRIORITY?  We might perfer to
+   use q registers, because some insn are shorter with them.  OTOH we
+   already have separate alternatives for this purpose, and other
+   insns don't mind, so maybe we should rather prefer the other
+   registers?  We need more data, and we can only get that if we allow
+   people to try all options.  */
 static int
 arc_register_priority (int r)
 {
@@ -11184,7 +11225,7 @@ arc_is_uncached_mem_p (rtx pat)
 
   /* Get the attributes.  */
   if (TREE_CODE (addr) == MEM_REF
-      || TREE_CODE (addr) == VAR_DECL)
+      || VAR_P (addr))
     {
       attrs = TYPE_ATTRIBUTES (TREE_TYPE (addr));
       if (lookup_attribute ("uncached", attrs))
@@ -11252,7 +11293,7 @@ arc_handle_aux_attribute (tree *node,
 	  /* FIXME! add range check.  TREE_INT_CST_LOW (arg) */
 	}
 
-      if (TREE_CODE (*node) == VAR_DECL)
+      if (VAR_P (*node))
 	{
 	  tree fntype = TREE_TYPE (*node);
 	  if (fntype && TREE_CODE (fntype) == POINTER_TYPE)
@@ -11747,6 +11788,37 @@ arc_insn_cost (rtx_insn *insn, bool speed)
   return cost;
 }
 
+static unsigned
+arc_libm_function_max_error (unsigned cfn, machine_mode mode,
+			     bool boundary_p)
+{
+#ifdef OPTION_GLIBC
+  bool glibc_p = OPTION_GLIBC;
+#else
+  bool glibc_p = false;
+#endif
+  if (glibc_p)
+    {
+      int rnd = flag_rounding_math ? 4 : 0;
+      switch (cfn)
+	{
+	CASE_CFN_SIN:
+	CASE_CFN_SIN_FN:
+	  if (!boundary_p && mode == DFmode)
+	    return 7 + rnd;
+	  break;
+	CASE_CFN_COS:
+	CASE_CFN_COS_FN:
+	  if (!boundary_p && mode == DFmode)
+	    return 4 + rnd;
+	default:
+	  break;
+	}
+      return glibc_linux_libm_function_max_error (cfn, mode, boundary_p);
+    }
+  return default_libm_function_max_error (cfn, mode, boundary_p);
+}
+
 #undef TARGET_USE_ANCHORS_FOR_SYMBOL_P
 #define TARGET_USE_ANCHORS_FOR_SYMBOL_P arc_use_anchors_for_symbol_p
 
@@ -11770,6 +11842,9 @@ arc_insn_cost (rtx_insn *insn, bool speed)
 
 #undef  TARGET_INSN_COST
 #define TARGET_INSN_COST arc_insn_cost
+
+#undef  TARGET_LIBM_FUNCTION_MAX_ERROR
+#define TARGET_LIBM_FUNCTION_MAX_ERROR arc_libm_function_max_error
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

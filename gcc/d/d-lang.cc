@@ -1,5 +1,5 @@
 /* d-lang.cc -- Language-dependent hooks for D.
-   Copyright (C) 2006-2022 Free Software Foundation, Inc.
+   Copyright (C) 2006-2023 Free Software Foundation, Inc.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -303,7 +303,7 @@ d_init_options (unsigned int, cl_decoded_option *decoded_options)
   /* Warnings and deprecations are disabled by default.  */
   global.params.useDeprecated = DIAGNOSTICinform;
   global.params.warnings = DIAGNOSTICoff;
-  global.params.messageStyle = MESSAGESTYLEgnu;
+  global.params.messageStyle = MessageStyle::gnu;
 
   global.params.imppath = d_gc_malloc<Strings> ();
   global.params.fileImppath = d_gc_malloc<Strings> ();
@@ -456,16 +456,6 @@ d_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
       break;
 
     case OPT_fdebug_:
-      if (ISDIGIT (arg[0]))
-	{
-	  int level = integral_argument (arg);
-	  if (level != -1)
-	    {
-	      global.params.debuglevel = level;
-	      break;
-	    }
-	}
-
       if (Identifier::isValidIdentifier (CONST_CAST (char *, arg)))
 	{
 	  if (!global.params.debugids)
@@ -568,7 +558,6 @@ d_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
 
     case OPT_fpreview_all:
       global.params.ehnogc = value;
-      global.params.useDIP25 = FeatureState::enabled;
       global.params.useDIP1000 = FeatureState::enabled;
       global.params.useDIP1021 = value;
       global.params.bitfields = value;
@@ -577,10 +566,10 @@ d_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
       global.params.fixAliasThis = value;
       global.params.previewIn = value;
       global.params.fix16997 = value;
-      global.params.noSharedAccess = value;
+      global.params.noSharedAccess = FeatureState::enabled;
       global.params.rvalueRefParam = FeatureState::enabled;
       global.params.inclusiveInContracts = value;
-      global.params.shortenedMethods = value;
+      global.params.systemVariables = FeatureState::enabled;
       global.params.fixImmutableConv = value;
       break;
 
@@ -598,10 +587,6 @@ d_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
 
     case OPT_fpreview_dip1021:
       global.params.useDIP1021 = value;
-      break;
-
-    case OPT_fpreview_dip25:
-      global.params.useDIP25 = FeatureState::enabled;
       break;
 
     case OPT_fpreview_dtorfields:
@@ -629,15 +614,15 @@ d_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
       break;
 
     case OPT_fpreview_nosharedaccess:
-      global.params.noSharedAccess = value;
+      global.params.noSharedAccess = FeatureState::enabled;
       break;
 
     case OPT_fpreview_rvaluerefparam:
       global.params.rvalueRefParam = FeatureState::enabled;
       break;
 
-    case OPT_fpreview_shortenedmethods:
-      global.params.shortenedMethods = value;
+    case OPT_fpreview_systemvariables:
+      global.params.systemVariables = FeatureState::enabled;
       break;
 
     case OPT_frelease:
@@ -646,17 +631,12 @@ d_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
 
     case OPT_frevert_all:
       global.params.useDIP1000 = FeatureState::disabled;
-      global.params.useDIP25 = FeatureState::disabled;
       global.params.dtorFields = FeatureState::disabled;
       global.params.fix16997 = !value;
       break;
 
     case OPT_frevert_dip1000:
       global.params.useDIP1000 = FeatureState::disabled;
-      break;
-
-    case OPT_frevert_dip25:
-      global.params.useDIP25 = FeatureState::disabled;
       break;
 
     case OPT_frevert_dtorfields:
@@ -713,16 +693,6 @@ d_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
       break;
 
     case OPT_fversion_:
-      if (ISDIGIT (arg[0]))
-	{
-	  int level = integral_argument (arg);
-	  if (level != -1)
-	    {
-	      global.params.versionlevel = level;
-	      break;
-	    }
-	}
-
       if (Identifier::isValidIdentifier (CONST_CAST (char *, arg)))
 	{
 	  if (!global.params.versionids)
@@ -931,10 +901,6 @@ d_post_options (const char ** fn)
   if (global.params.useDIP1021)
     global.params.useDIP1000 = FeatureState::enabled;
 
-  /* Enabling DIP1000 implies DIP25.  */
-  if (global.params.useDIP1000 == FeatureState::enabled)
-    global.params.useDIP25 = FeatureState::enabled;
-
   /* Keep in sync with existing -fbounds-check flag.  */
   flag_bounds_check = (global.params.useArrayBounds == CHECKENABLEon);
 
@@ -959,6 +925,9 @@ d_post_options (const char ** fn)
   global.params.useInline = flag_inline_functions;
   global.params.showColumns = flag_show_column;
   global.params.printErrorContext = flag_diagnostics_show_caret;
+
+  /* Keep the front-end location type in sync with params.  */
+  Loc::set (global.params.showColumns, global.params.messageStyle);
 
   if (global.params.useInline)
     global.params.dihdr.fullOutput = true;
@@ -1211,7 +1180,6 @@ d_parse_file (void)
     }
 
   /* Do deferred semantic analysis.  */
-  Module::dprogress = 1;
   Module::runDeferredSemantic ();
 
   if (Module::deferred.length)
@@ -1933,6 +1901,15 @@ d_enum_underlying_base_type (const_tree type)
   return TREE_TYPE (type);
 }
 
+/* Get a value for the SARIF v2.1.0 "artifact.sourceLanguage" property,
+   based on the list in SARIF v2.1.0 Appendix J.  */
+
+static const char *
+d_get_sarif_source_language (const char *)
+{
+  return "d";
+}
+
 /* Definitions for our language-specific hooks.  */
 
 #undef LANG_HOOKS_NAME
@@ -1966,6 +1943,7 @@ d_enum_underlying_base_type (const_tree type)
 #undef LANG_HOOKS_TYPE_FOR_MODE
 #undef LANG_HOOKS_TYPE_FOR_SIZE
 #undef LANG_HOOKS_TYPE_PROMOTES_TO
+#undef LANG_HOOKS_GET_SARIF_SOURCE_LANGUAGE
 
 #define LANG_HOOKS_NAME			    "GNU D"
 #define LANG_HOOKS_INIT			    d_init
@@ -1998,6 +1976,7 @@ d_enum_underlying_base_type (const_tree type)
 #define LANG_HOOKS_TYPE_FOR_MODE	    d_type_for_mode
 #define LANG_HOOKS_TYPE_FOR_SIZE	    d_type_for_size
 #define LANG_HOOKS_TYPE_PROMOTES_TO	    d_type_promotes_to
+#define LANG_HOOKS_GET_SARIF_SOURCE_LANGUAGE d_get_sarif_source_language
 
 struct lang_hooks lang_hooks = LANG_HOOKS_INITIALIZER;
 

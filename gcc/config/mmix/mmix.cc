@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for MMIX.
-   Copyright (C) 2000-2022 Free Software Foundation, Inc.
+   Copyright (C) 2000-2023 Free Software Foundation, Inc.
    Contributed by Hans-Peter Nilsson (hp@bitrange.com)
 
 This file is part of GCC.
@@ -272,9 +272,6 @@ static HOST_WIDE_INT mmix_starting_frame_offset (void);
 #define TARGET_PREFERRED_RELOAD_CLASS mmix_preferred_reload_class
 #undef TARGET_PREFERRED_OUTPUT_RELOAD_CLASS
 #define TARGET_PREFERRED_OUTPUT_RELOAD_CLASS mmix_preferred_output_reload_class
-
-#undef TARGET_LRA_P
-#define TARGET_LRA_P hook_bool_void_false
 
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P	mmix_legitimate_address_p
@@ -999,7 +996,8 @@ mmix_setup_incoming_varargs (cumulative_args_t args_so_farp_v,
 
   /* We assume that one argument takes up one register here.  That should
      be true until we start messing with multi-reg parameters.  */
-  if ((7 + (MMIX_FUNCTION_ARG_SIZE (arg.mode, arg.type))) / 8 != 1)
+  if (!TYPE_NO_NAMED_ARGS_STDARG_P (TREE_TYPE (current_function_decl))
+      && (7 + (MMIX_FUNCTION_ARG_SIZE (arg.mode, arg.type))) / 8 != 1)
     internal_error ("MMIX Internal: Last named vararg would not fit in a register");
 }
 
@@ -1264,7 +1262,7 @@ static void
 mmix_encode_section_info (tree decl, rtx rtl, int first)
 {
   /* Test for an external declaration, and do nothing if it is one.  */
-  if ((TREE_CODE (decl) == VAR_DECL
+  if ((VAR_P (decl)
        && (DECL_EXTERNAL (decl) || TREE_PUBLIC (decl)))
       || (TREE_CODE (decl) == FUNCTION_DECL && TREE_PUBLIC (decl)))
     ;
@@ -1293,7 +1291,7 @@ mmix_encode_section_info (tree decl, rtx rtl, int first)
      For now, functions and things we know or have been told are constant.  */
   if (TREE_CODE (decl) == FUNCTION_DECL
       || TREE_CONSTANT (decl)
-      || (TREE_CODE (decl) == VAR_DECL
+      || (VAR_P (decl)
 	  && TREE_READONLY (decl)
 	  && !TREE_SIDE_EFFECTS (decl)
 	  && (!DECL_INITIAL (decl)
@@ -1942,10 +1940,10 @@ mmix_asm_output_align (FILE *stream, int power)
  fprintf (stream, "\tLOC @+(%d-@)&%d\n", 1 << power, (1 << power) - 1);
 }
 
-/* DBX_REGISTER_NUMBER.  */
+/* DEBUGGER_REGNO.  */
 
 unsigned
-mmix_dbx_register_number (unsigned regno)
+mmix_debugger_regno (unsigned regno)
 {
   /* Adjust the register number to the one it will be output as, dammit.
      It'd be nice if we could check the assumption that we're filling a
@@ -1956,7 +1954,7 @@ mmix_dbx_register_number (unsigned regno)
   /* We need to renumber registers to get the number of the return address
      register in the range 0..255.  It is also space-saving if registers
      mentioned in the call-frame information (which uses this function by
-     defaulting DWARF_FRAME_REGNUM to DBX_REGISTER_NUMBER) are numbered
+     defaulting DWARF_FRAME_REGNUM to DEBUGGER_REGNO) are numbered
      0 .. 63.  So map 224 .. 256+15 -> 0 .. 47 and 0 .. 223 -> 48..223+48.  */
   return regno >= 224 ? (regno - 224) : (regno + 48);
 }

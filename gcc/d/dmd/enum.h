@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2022 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * https://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -35,10 +35,15 @@ public:
     Expression *maxval;
     Expression *minval;
     Expression *defaultval;     // default initializer
-
-    bool isdeprecated;
-    bool added;
-    int inuse;
+private:
+    uint8_t bitFields;
+public:
+    bool isdeprecated() const;
+    bool isdeprecated(bool v);
+    bool added() const;
+    bool added(bool v);
+    bool inuse() const;
+    bool inuse(bool v);
 
     EnumDeclaration *syntaxCopy(Dsymbol *s) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;

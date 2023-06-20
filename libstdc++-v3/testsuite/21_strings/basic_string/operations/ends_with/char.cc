@@ -1,7 +1,7 @@
 // { dg-options "-std=gnu++2a" }
 // { dg-do run { target c++2a } }
 
-// Copyright (C) 2018-2022 Free Software Foundation, Inc.
+// Copyright (C) 2018-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -20,7 +20,7 @@
 
 // basic_string ends_with
 
-#include <string>
+#include <testsuite_string.h>
 #include <testsuite_hooks.h>
 
 void
@@ -31,7 +31,7 @@ test01()
   const char cstr_suf2[] = ".rgb";
   const std::string_view sv_suf2(".rgb");
 
-  const std::string s_test("slugs/slimy.jpg");
+  const __gnu_test::string s_test("slugs/slimy.jpg");
 
   const auto cstr_in_slugs = s_test.ends_with(cstr_suf);
   VERIFY( cstr_in_slugs );

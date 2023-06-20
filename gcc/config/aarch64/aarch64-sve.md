@@ -1,5 +1,5 @@
 ;; Machine description for AArch64 SVE.
-;; Copyright (C) 2009-2022 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2023 Free Software Foundation, Inc.
 ;; Contributed by ARM Ltd.
 ;;
 ;; This file is part of GCC.
@@ -2533,14 +2533,34 @@
 )
 
 ;; Duplicate an Advanced SIMD vector to fill an SVE vector (LE version).
-(define_insn "@aarch64_vec_duplicate_vq<mode>_le"
-  [(set (match_operand:SVE_FULL 0 "register_operand" "=w")
+
+(define_insn_and_split "@aarch64_vec_duplicate_vq<mode>_le"
+  [(set (match_operand:SVE_FULL 0 "register_operand" "=w, w")
 	(vec_duplicate:SVE_FULL
-	  (match_operand:<V128> 1 "register_operand" "w")))]
+	  (match_operand:<V128> 1 "aarch64_sve_dup_ld1rq_operand" "w, UtQ")))
+   (clobber (match_scratch:VNx16BI 2 "=X, Upl"))]
   "TARGET_SVE && !BYTES_BIG_ENDIAN"
   {
-    operands[1] = gen_rtx_REG (<MODE>mode, REGNO (operands[1]));
-    return "dup\t%0.q, %1.q[0]";
+    switch (which_alternative)
+      {
+	case 0:
+	  operands[1] = gen_rtx_REG (<MODE>mode, REGNO (operands[1]));
+	  return "dup\t%0.q, %1.q[0]";
+	case 1:
+	  return "#";
+	default:
+	  gcc_unreachable ();
+      }
+  }
+  "&& MEM_P (operands[1])"
+  [(const_int 0)]
+  {
+    if (GET_CODE (operands[2]) == SCRATCH)
+      operands[2] = gen_reg_rtx (VNx16BImode);
+    emit_move_insn (operands[2], CONSTM1_RTX (VNx16BImode));
+    rtx gp = gen_lowpart (<VPRED>mode, operands[2]);
+    emit_insn (gen_aarch64_sve_ld1rq<mode> (operands[0], operands[1], gp));
+    DONE;
   }
 )
 
@@ -3637,6 +3657,15 @@
 	  UNSPEC_PRED_X))]
   "TARGET_SVE"
   {
+    /* SVE2 supports the MUL (vectors, unpredicated) form.  Emit the simple
+       pattern for it here rather than splitting off the MULT expander
+       separately.  */
+    if (TARGET_SVE2 && <CODE> == MULT)
+      {
+	emit_move_insn (operands[0], gen_rtx_MULT (<MODE>mode,
+						   operands[1], operands[2]));
+	DONE;
+      }
     operands[3] = aarch64_ptrue_reg (<VPRED>mode);
   }
 )
@@ -3972,7 +4001,7 @@
 ;; -------------------------------------------------------------------------
 
 ;; Unpredicated integer absolute difference.
-(define_expand "<su>abd<mode>_3"
+(define_expand "<su>abd<mode>3"
   [(use (match_operand:SVE_I 0 "register_operand"))
    (USMAX:SVE_I
      (match_operand:SVE_I 1 "register_operand")
@@ -6935,16 +6964,16 @@
 ;; [SU]ABD	diff.b, p0/m, op1.b, op2.b
 ;; MOVPRFX	op0, op3	// If necessary
 ;; UDOT		op0.s, diff.b, ones.b
-(define_expand "<sur>sad<vsi2qi>"
+(define_expand "<su>sad<vsi2qi>"
   [(use (match_operand:SVE_FULL_SDI 0 "register_operand"))
-   (unspec:<VSI2QI> [(use (match_operand:<VSI2QI> 1 "register_operand"))
-		    (use (match_operand:<VSI2QI> 2 "register_operand"))] ABAL)
+   (USMAX:<VSI2QI> (match_operand:<VSI2QI> 1 "register_operand")
+		   (match_operand:<VSI2QI> 2 "register_operand"))
    (use (match_operand:SVE_FULL_SDI 3 "register_operand"))]
   "TARGET_SVE"
   {
     rtx ones = force_reg (<VSI2QI>mode, CONST1_RTX (<VSI2QI>mode));
     rtx diff = gen_reg_rtx (<VSI2QI>mode);
-    emit_insn (gen_<sur>abd<vsi2qi>_3 (diff, operands[1], operands[2]));
+    emit_insn (gen_<su>abd<vsi2qi>3 (diff, operands[1], operands[2]));
     emit_insn (gen_udot_prod<vsi2qi> (operands[0], diff, ones, operands[3]));
     DONE;
   }
@@ -7595,7 +7624,7 @@
 (define_insn "*vcond_mask_<mode><vpred>"
   [(set (match_operand:SVE_ALL 0 "register_operand" "=w, w, w, w, ?w, ?&w, ?&w")
 	(unspec:SVE_ALL
-	  [(match_operand:<VPRED> 3 "register_operand" "Upa, Upa, Upa, Upa, Upl, Upl, Upl")
+	  [(match_operand:<VPRED> 3 "register_operand" "Upa, Upa, Upa, Upa, Upl, Upa, Upa")
 	   (match_operand:SVE_ALL 1 "aarch64_sve_reg_or_dup_imm" "w, vss, vss, Ufc, Ufc, vss, Ufc")
 	   (match_operand:SVE_ALL 2 "aarch64_simd_reg_or_zero" "w, 0, Dz, 0, Dz, w, w")]
 	  UNSPEC_SEL))]
@@ -8231,7 +8260,7 @@
 	        [(match_operand:<VPRED> 1)
 	         (const_int SVE_KNOWN_PTRUE)
 	         (match_operand:SVE_FULL_F 2 "register_operand" "w")
-	         (match_operand:SVE_FULL_F 3 "aarch64_simd_reg_or_zero" "wDz")]
+	         (match_operand:SVE_FULL_F 3 "register_operand" "w")]
 	        UNSPEC_COND_FCMUO))
 	    (match_operand:<VPRED> 4 "register_operand" "Upa"))
 	  (match_dup:<VPRED> 1)))
@@ -8267,7 +8296,7 @@
 	        [(match_operand:<VPRED> 1)
 	         (const_int SVE_KNOWN_PTRUE)
 	         (match_operand:SVE_FULL_F 2 "register_operand" "w")
-	         (match_operand:SVE_FULL_F 3 "aarch64_simd_reg_or_zero" "wDz")]
+	         (match_operand:SVE_FULL_F 3 "register_operand" "w")]
 	        UNSPEC_COND_FCMUO))
 	    (not:<VPRED>
 	      (match_operand:<VPRED> 4 "register_operand" "Upa")))
@@ -9612,45 +9641,41 @@
 (define_insn "*aarch64_brk<brk_op>_cc"
   [(set (reg:CC_NZC CC_REGNUM)
 	(unspec:CC_NZC
-	  [(match_operand:VNx16BI 1 "register_operand" "Upa, Upa")
+	  [(match_operand:VNx16BI 1 "register_operand" "Upa")
 	   (match_dup 1)
 	   (match_operand:SI 4 "aarch64_sve_ptrue_flag")
 	   (unspec:VNx16BI
 	     [(match_dup 1)
-	      (match_operand:VNx16BI 2 "register_operand" "Upa, Upa")
-	      (match_operand:VNx16BI 3 "aarch64_simd_reg_or_zero" "Dz, 0")]
+	      (match_operand:VNx16BI 2 "register_operand" "Upa")
+	      (match_operand:VNx16BI 3 "aarch64_simd_imm_zero")]
 	     SVE_BRK_UNARY)]
 	  UNSPEC_PTEST))
-   (set (match_operand:VNx16BI 0 "register_operand" "=Upa, Upa")
+   (set (match_operand:VNx16BI 0 "register_operand" "=Upa")
 	(unspec:VNx16BI
 	  [(match_dup 1)
 	   (match_dup 2)
 	   (match_dup 3)]
 	  SVE_BRK_UNARY))]
   "TARGET_SVE"
-  "@
-   brk<brk_op>s\t%0.b, %1/z, %2.b
-   brk<brk_op>s\t%0.b, %1/m, %2.b"
+  "brk<brk_op>s\t%0.b, %1/z, %2.b"
 )
 
 ;; Same, but with only the flags result being interesting.
 (define_insn "*aarch64_brk<brk_op>_ptest"
   [(set (reg:CC_NZC CC_REGNUM)
 	(unspec:CC_NZC
-	  [(match_operand:VNx16BI 1 "register_operand" "Upa, Upa")
+	  [(match_operand:VNx16BI 1 "register_operand" "Upa")
 	   (match_dup 1)
 	   (match_operand:SI 4 "aarch64_sve_ptrue_flag")
 	   (unspec:VNx16BI
 	     [(match_dup 1)
-	      (match_operand:VNx16BI 2 "register_operand" "Upa, Upa")
-	      (match_operand:VNx16BI 3 "aarch64_simd_reg_or_zero" "Dz, 0")]
+	      (match_operand:VNx16BI 2 "register_operand" "Upa")
+	      (match_operand:VNx16BI 3 "aarch64_simd_imm_zero")]
 	     SVE_BRK_UNARY)]
 	  UNSPEC_PTEST))
-   (clobber (match_scratch:VNx16BI 0 "=Upa, Upa"))]
+   (clobber (match_scratch:VNx16BI 0 "=Upa"))]
   "TARGET_SVE"
-  "@
-   brk<brk_op>s\t%0.b, %1/z, %2.b
-   brk<brk_op>s\t%0.b, %1/m, %2.b"
+  "brk<brk_op>s\t%0.b, %1/z, %2.b"
 )
 
 ;; -------------------------------------------------------------------------
@@ -9677,7 +9702,61 @@
   "brk<brk_op>\t%0.b, %1/z, %2.b, %<brk_reg_opno>.b"
 )
 
-;; Same, but also producing a flags result.
+;; BRKN, producing both a predicate and a flags result.  Unlike other
+;; flag-setting instructions, these flags are always set wrt a ptrue.
+(define_insn_and_rewrite "*aarch64_brkn_cc"
+  [(set (reg:CC_NZC CC_REGNUM)
+	(unspec:CC_NZC
+	  [(match_operand:VNx16BI 4)
+	   (match_operand:VNx16BI 5)
+	   (const_int SVE_KNOWN_PTRUE)
+	   (unspec:VNx16BI
+	     [(match_operand:VNx16BI 1 "register_operand" "Upa")
+	      (match_operand:VNx16BI 2 "register_operand" "Upa")
+	      (match_operand:VNx16BI 3 "register_operand" "0")]
+	     UNSPEC_BRKN)]
+	  UNSPEC_PTEST))
+   (set (match_operand:VNx16BI 0 "register_operand" "=Upa")
+	(unspec:VNx16BI
+	  [(match_dup 1)
+	   (match_dup 2)
+	   (match_dup 3)]
+	  UNSPEC_BRKN))]
+  "TARGET_SVE"
+  "brkns\t%0.b, %1/z, %2.b, %0.b"
+  "&& (operands[4] != CONST0_RTX (VNx16BImode)
+       || operands[5] != CONST0_RTX (VNx16BImode))"
+  {
+    operands[4] = CONST0_RTX (VNx16BImode);
+    operands[5] = CONST0_RTX (VNx16BImode);
+  }
+)
+
+;; Same, but with only the flags result being interesting.
+(define_insn_and_rewrite "*aarch64_brkn_ptest"
+  [(set (reg:CC_NZC CC_REGNUM)
+	(unspec:CC_NZC
+	  [(match_operand:VNx16BI 4)
+	   (match_operand:VNx16BI 5)
+	   (const_int SVE_KNOWN_PTRUE)
+	   (unspec:VNx16BI
+	     [(match_operand:VNx16BI 1 "register_operand" "Upa")
+	      (match_operand:VNx16BI 2 "register_operand" "Upa")
+	      (match_operand:VNx16BI 3 "register_operand" "0")]
+	     UNSPEC_BRKN)]
+	  UNSPEC_PTEST))
+   (clobber (match_scratch:VNx16BI 0 "=Upa"))]
+  "TARGET_SVE"
+  "brkns\t%0.b, %1/z, %2.b, %0.b"
+  "&& (operands[4] != CONST0_RTX (VNx16BImode)
+       || operands[5] != CONST0_RTX (VNx16BImode))"
+  {
+    operands[4] = CONST0_RTX (VNx16BImode);
+    operands[5] = CONST0_RTX (VNx16BImode);
+  }
+)
+
+;; BRKPA and BRKPB, producing both a predicate and a flags result.
 (define_insn "*aarch64_brk<brk_op>_cc"
   [(set (reg:CC_NZC CC_REGNUM)
 	(unspec:CC_NZC
@@ -9687,17 +9766,17 @@
 	   (unspec:VNx16BI
 	     [(match_dup 1)
 	      (match_operand:VNx16BI 2 "register_operand" "Upa")
-	      (match_operand:VNx16BI 3 "register_operand" "<brk_reg_con>")]
-	     SVE_BRK_BINARY)]
+	      (match_operand:VNx16BI 3 "register_operand" "Upa")]
+	     SVE_BRKP)]
 	  UNSPEC_PTEST))
    (set (match_operand:VNx16BI 0 "register_operand" "=Upa")
 	(unspec:VNx16BI
 	  [(match_dup 1)
 	   (match_dup 2)
 	   (match_dup 3)]
-	  SVE_BRK_BINARY))]
+	  SVE_BRKP))]
   "TARGET_SVE"
-  "brk<brk_op>s\t%0.b, %1/z, %2.b, %<brk_reg_opno>.b"
+  "brk<brk_op>s\t%0.b, %1/z, %2.b, %3.b"
 )
 
 ;; Same, but with only the flags result being interesting.
@@ -9710,12 +9789,12 @@
 	   (unspec:VNx16BI
 	     [(match_dup 1)
 	      (match_operand:VNx16BI 2 "register_operand" "Upa")
-	      (match_operand:VNx16BI 3 "register_operand" "<brk_reg_con>")]
-	     SVE_BRK_BINARY)]
+	      (match_operand:VNx16BI 3 "register_operand" "Upa")]
+	     SVE_BRKP)]
 	  UNSPEC_PTEST))
    (clobber (match_scratch:VNx16BI 0 "=Upa"))]
   "TARGET_SVE"
-  "brk<brk_op>s\t%0.b, %1/z, %2.b, %<brk_reg_opno>.b"
+  "brk<brk_op>s\t%0.b, %1/z, %2.b, %3.b"
 )
 
 ;; -------------------------------------------------------------------------

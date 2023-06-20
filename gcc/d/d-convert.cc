@@ -1,5 +1,5 @@
 /* d-convert.cc -- Data type conversion routines.
-   Copyright (C) 2006-2022 Free Software Foundation, Inc.
+   Copyright (C) 2006-2023 Free Software Foundation, Inc.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -257,7 +257,7 @@ convert (tree type, tree expr)
     return fold_convert (type, expr);
   if (TREE_CODE (TREE_TYPE (expr)) == ERROR_MARK)
     return error_mark_node;
-  if (TREE_CODE (TREE_TYPE (expr)) == VOID_TYPE)
+  if (VOID_TYPE_P (TREE_TYPE (expr)))
     {
       error ("void value not ignored as it ought to be");
       return error_mark_node;
@@ -270,8 +270,7 @@ convert (tree type, tree expr)
 
     case INTEGER_TYPE:
     case ENUMERAL_TYPE:
-      if (TREE_CODE (etype) == POINTER_TYPE
-	  || TREE_CODE (etype) == REFERENCE_TYPE)
+      if (POINTER_TYPE_P (etype))
 	{
 	  if (integer_zerop (e))
 	    return build_int_cst (type, 0);
@@ -300,7 +299,7 @@ convert (tree type, tree expr)
       return fold (convert_to_real (type, e));
 
     case COMPLEX_TYPE:
-      if (TREE_CODE (etype) == REAL_TYPE && TYPE_IMAGINARY_FLOAT (etype))
+      if (SCALAR_FLOAT_TYPE_P (etype) && TYPE_IMAGINARY_FLOAT (etype))
 	return fold_build2 (COMPLEX_EXPR, type,
 			    build_zero_cst (TREE_TYPE (type)),
 			    convert (TREE_TYPE (type), expr));
@@ -502,6 +501,15 @@ convert_expr (tree exp, Type *etype, Type *totype)
 	  gcc_assert (totype->size () == etype->size ());
 	  result = build_vconvert (build_ctype (totype), exp);
 	}
+      else if (tbtype->ty == TY::Tvector && tbtype->size () == ebtype->size ())
+	{
+	  /* Allow casting from array to vector as if its an unaligned load.  */
+	  tree type = build_ctype (totype);
+	  tree unaligned_type = build_variant_type_copy (type);
+	  SET_TYPE_ALIGN (unaligned_type, 1 * BITS_PER_UNIT);
+	  TYPE_USER_ALIGN (unaligned_type) = 1;
+	  result = convert (type, build_vconvert (unaligned_type, exp));
+	}
       else
 	{
 	  error ("cannot cast expression of type %qs to type %qs",
@@ -643,6 +651,39 @@ convert_for_rvalue (tree expr, Type *etype, Type *totype)
       result = convert (build_ctype (tbtype), result);
     }
 
+  if (tbtype->ty == TY::Tsarray
+      && ebtype->ty == TY::Tsarray
+      && tbtype->nextOf ()->ty == ebtype->nextOf ()->ty
+      && INDIRECT_REF_P (expr)
+      && CONVERT_EXPR_P (TREE_OPERAND (expr, 0))
+      && TREE_CODE (TREE_OPERAND (TREE_OPERAND (expr, 0), 0)) == ADDR_EXPR)
+    {
+      /* If expression is a vector that was casted to an array either by
+	 explicit type cast or by taking the vector's `.array' value, strip the
+	 reinterpret cast and build a constructor instead.  */
+      tree ptr = TREE_OPERAND (TREE_OPERAND (expr, 0), 0);
+
+      if (VECTOR_TYPE_P (TREE_TYPE (TREE_TYPE (ptr))))
+	{
+	  /* Rewrite: `*(Array *)&vector'
+		into: `{ vector[0], vector[1], ... }'  */
+	  tree array = d_save_expr (TREE_OPERAND (ptr, 0));
+	  array = build1 (VIEW_CONVERT_EXPR, TREE_TYPE (expr), array);
+
+	  uinteger_t dim = tbtype->isTypeSArray ()->dim->toUInteger ();
+	  vec <constructor_elt, va_gc> *elms = NULL;
+	  for (uinteger_t i = 0; i < dim; i++)
+	    {
+	      tree index = size_int (i);
+	      tree value = build4 (ARRAY_REF, TREE_TYPE (TREE_TYPE (array)),
+				   array, index, NULL_TREE, NULL_TREE);
+	      CONSTRUCTOR_APPEND_ELT (elms, index, value);
+	    }
+
+	  return build_constructor (build_ctype (totype), elms);
+	}
+    }
+
   return result ? result : convert_expr (expr, etype, totype);
 }
 
@@ -703,7 +744,7 @@ convert_for_assignment (tree expr, Type *etype, Type *totype)
       return expr;
     }
 
-  return convert_expr (expr, etype, totype);
+  return convert_for_rvalue (expr, etype, totype);
 }
 
 /* Return a TREE representation of EXPR converted to represent

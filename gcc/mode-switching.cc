@@ -1,5 +1,5 @@
 /* CPU mode switching
-   Copyright (C) 1998-2022 Free Software Foundation, Inc.
+   Copyright (C) 1998-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -499,8 +499,8 @@ optimize_mode_switching (void)
   bool need_commit = false;
   static const int num_modes[] = NUM_MODES_FOR_MODE_SWITCHING;
 #define N_ENTITIES ARRAY_SIZE (num_modes)
-  int entity_map[N_ENTITIES];
-  struct bb_info *bb_info[N_ENTITIES];
+  int entity_map[N_ENTITIES] = {};
+  struct bb_info *bb_info[N_ENTITIES] = {};
   int i, j;
   int n_entities = 0;
   int max_num_modes = 0;
@@ -893,8 +893,8 @@ public:
   /* opt_pass methods: */
   /* The epiphany backend creates a second instance of this pass, so we need
      a clone method.  */
-  opt_pass * clone () { return new pass_mode_switching (m_ctxt); }
-  virtual bool gate (function *)
+  opt_pass * clone () final override { return new pass_mode_switching (m_ctxt); }
+  bool gate (function *) final override
     {
 #ifdef OPTIMIZE_MODE_SWITCHING
       return true;
@@ -903,7 +903,7 @@ public:
 #endif
     }
 
-  virtual unsigned int execute (function *)
+  unsigned int execute (function *) final override
     {
 #ifdef OPTIMIZE_MODE_SWITCHING
       optimize_mode_switching ();

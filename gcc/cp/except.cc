@@ -1,5 +1,5 @@
 /* Handle exceptional things in C++.
-   Copyright (C) 1989-2022 Free Software Foundation, Inc.
+   Copyright (C) 1989-2023 Free Software Foundation, Inc.
    Contributed by Michael Tiemann <tiemann@cygnus.com>
    Rewritten by Mike Stump <mrs@cygnus.com>, based upon an
    initial re-implementation courtesy Tad Hunt.
@@ -64,6 +64,9 @@ init_exception_processing (void)
   tmp = build_function_type_list (void_type_node, ptr_type_node, NULL_TREE);
   call_unexpected_fn
     = push_throw_library_fn (get_identifier ("__cxa_call_unexpected"), tmp);
+  call_terminate_fn
+    = push_library_fn (get_identifier ("__cxa_call_terminate"), tmp, NULL_TREE,
+		       ECF_NORETURN | ECF_COLD | ECF_NOTHROW);
 }
 
 /* Returns an expression to be executed if an unhandled exception is
@@ -76,7 +79,7 @@ cp_protect_cleanup_actions (void)
 
      When the destruction of an object during stack unwinding exits
      using an exception ... void terminate(); is called.  */
-  return terminate_fn;
+  return call_terminate_fn;
 }
 
 static tree
@@ -639,6 +642,8 @@ build_throw (location_t loc, tree exp)
       tree object, ptr;
       tree allocate_expr;
 
+      tsubst_flags_t complain = tf_warning_or_error;
+
       /* The CLEANUP_TYPE is the internal type of a destructor.  */
       if (!cleanup_type)
 	{
@@ -715,25 +720,10 @@ build_throw (location_t loc, tree exp)
 	     treated as an rvalue for the purposes of overload resolution
 	     to favor move constructors over copy constructors.  */
 	  if (tree moved = treat_lvalue_as_rvalue_p (exp, /*return*/false))
-	    {
-	      if (cxx_dialect < cxx20)
-		{
-		  releasing_vec exp_vec (make_tree_vector_single (moved));
-		  moved = (build_special_member_call
-			   (object, complete_ctor_identifier, &exp_vec,
-			    TREE_TYPE (object), flags|LOOKUP_PREFER_RVALUE,
-			    tf_none));
-		  if (moved != error_mark_node)
-		    {
-		      exp = moved;
-		      converted = true;
-		    }
-		}
-	      else
-		/* In C++20 we just treat the return value as an rvalue that
-		   can bind to lvalue refs.  */
-		exp = moved;
-	    }
+	    /* In C++20 we treat the return value as an rvalue that
+	       can bind to lvalue refs.  In C++23, such an expression is just
+	       an xvalue.  */
+	    exp = moved;
 
 	  /* Call the copy constructor.  */
 	  if (!converted)
@@ -755,7 +745,7 @@ build_throw (location_t loc, tree exp)
 	  tree tmp = decay_conversion (exp, tf_warning_or_error);
 	  if (tmp == error_mark_node)
 	    return error_mark_node;
-	  exp = build2 (INIT_EXPR, temp_type, object, tmp);
+	  exp = cp_build_init_expr (object, tmp);
 	}
 
       /* Mark any cleanups from the initialization as MUST_NOT_THROW, since
@@ -774,11 +764,15 @@ build_throw (location_t loc, tree exp)
       cleanup = NULL_TREE;
       if (type_build_dtor_call (TREE_TYPE (object)))
 	{
-	  tree dtor_fn = lookup_fnfields (TYPE_BINFO (TREE_TYPE (object)),
+	  tree binfo = TYPE_BINFO (TREE_TYPE (object));
+	  tree dtor_fn = lookup_fnfields (binfo,
 					  complete_dtor_identifier, 0,
 					  tf_warning_or_error);
 	  dtor_fn = BASELINK_FUNCTIONS (dtor_fn);
-	  mark_used (dtor_fn);
+	  if (!mark_used (dtor_fn)
+	      || !perform_or_defer_access_check (binfo, dtor_fn,
+						 dtor_fn, complain))
+	    return error_mark_node;
 	  if (TYPE_HAS_NONTRIVIAL_DESTRUCTOR (TREE_TYPE (object)))
 	    {
 	      cxx_mark_addressable (dtor_fn);
@@ -1256,8 +1250,8 @@ build_noexcept_spec (tree expr, tsubst_flags_t complain)
       && !instantiation_dependent_expression_p (expr))
     {
       expr = build_converted_constant_bool_expr (expr, complain);
-      expr = instantiate_non_dependent_expr_sfinae (expr, complain);
-      expr = cxx_constant_value (expr);
+      expr = instantiate_non_dependent_expr (expr, complain);
+      expr = cxx_constant_value (expr, complain);
     }
   if (TREE_CODE (expr) == INTEGER_CST)
     {
@@ -1286,7 +1280,9 @@ build_noexcept_spec (tree expr, tsubst_flags_t complain)
 /* If the current function has a cleanup that might throw, and the return value
    has a non-trivial destructor, return a MODIFY_EXPR to set
    current_retval_sentinel so that we know that the return value needs to be
-   destroyed on throw.  Otherwise, returns NULL_TREE.  */
+   destroyed on throw.  Do the same if the current function might use the
+   named return value optimization, so we don't destroy it on return.
+   Otherwise, returns NULL_TREE.  */
 
 tree
 maybe_set_retval_sentinel ()
@@ -1296,7 +1292,9 @@ maybe_set_retval_sentinel ()
   tree retval = DECL_RESULT (current_function_decl);
   if (!TYPE_HAS_NONTRIVIAL_DESTRUCTOR (TREE_TYPE (retval)))
     return NULL_TREE;
-  if (!cp_function_chain->throwing_cleanup)
+  if (!cp_function_chain->throwing_cleanup
+      && (current_function_return_value == error_mark_node
+	  || current_function_return_value == NULL_TREE))
     return NULL_TREE;
 
   if (!current_retval_sentinel)
@@ -1318,18 +1316,20 @@ maybe_set_retval_sentinel ()
    on throw.  */
 
 void
-maybe_splice_retval_cleanup (tree compound_stmt)
+maybe_splice_retval_cleanup (tree compound_stmt, bool is_try)
 {
-  /* If we need a cleanup for the return value, add it in at the same level as
-     pushdecl_outermost_localscope.  And also in try blocks.  */
-  bool function_body
-    = (current_binding_level->level_chain
-       && current_binding_level->level_chain->kind == sk_function_parms);
+  if (!current_function_decl || !cfun
+      || DECL_CONSTRUCTOR_P (current_function_decl)
+      || DECL_DESTRUCTOR_P (current_function_decl)
+      || !current_retval_sentinel)
+    return;
 
-  if ((function_body || current_binding_level->kind == sk_try)
-      && !DECL_CONSTRUCTOR_P (current_function_decl)
-      && !DECL_DESTRUCTOR_P (current_function_decl)
-      && current_retval_sentinel)
+  /* if we need a cleanup for the return value, add it in at the same level as
+     pushdecl_outermost_localscope.  And also in try blocks.  */
+  cp_binding_level *b = current_binding_level;
+  const bool function_body = b->kind == sk_function_parms;
+
+  if (function_body || is_try)
     {
       location_t loc = DECL_SOURCE_LOCATION (current_function_decl);
       tree_stmt_iterator iter = tsi_start (compound_stmt);
@@ -1341,6 +1341,10 @@ maybe_splice_retval_cleanup (tree compound_stmt)
 	  tree decl_expr = build_stmt (loc, DECL_EXPR, current_retval_sentinel);
 	  tsi_link_before (&iter, decl_expr, TSI_SAME_STMT);
 	}
+
+      if (!cp_function_chain->throwing_cleanup)
+	/* We're only using the sentinel for an NRV.  */
+	return;
 
       /* Skip past other decls, they can't contain a return.  */
       while (TREE_CODE (tsi_stmt (iter)) == DECL_EXPR)

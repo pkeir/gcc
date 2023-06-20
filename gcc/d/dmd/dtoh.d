@@ -2,7 +2,7 @@
  * This module contains the implementation of the C++ header generation available through
  * the command line switch -Hc.
  *
- * Copyright:   Copyright (C) 1999-2022 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 https://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/dtohd, _dtoh.d)
@@ -24,6 +24,7 @@ import dmd.errors;
 import dmd.globals;
 import dmd.hdrgen;
 import dmd.identifier;
+import dmd.location;
 import dmd.root.filename;
 import dmd.visitor;
 import dmd.tokens;
@@ -290,9 +291,23 @@ public:
 
     /// Informations about the current context in the AST
     Context context;
-    alias context this;
 
-    this(OutBuffer* fwdbuf, OutBuffer* donebuf, OutBuffer* buf)
+    // Generates getter-setter methods to replace the use of alias this
+    // This should be replaced by a `static foreach` once the gdc tester
+    // gets upgraded to version 10 (to support `static foreach`).
+    private extern(D) static string generateMembers()
+    {
+        string result = "";
+        foreach(member; __traits(allMembers, Context))
+        {
+            result ~= "ref auto " ~ member ~ "() { return context." ~ member ~ "; }\n";
+        }
+        return result;
+    }
+
+    mixin(generateMembers());
+
+    this(OutBuffer* fwdbuf, OutBuffer* donebuf, OutBuffer* buf) scope
     {
         this.fwdbuf = fwdbuf;
         this.donebuf = donebuf;
@@ -873,7 +888,11 @@ public:
         // Tuple field are expanded into multiple VarDeclarations
         // (we'll visit them later)
         if (vd.type && vd.type.isTypeTuple())
+        {
+            assert(vd.aliasTuple);
+            vd.toAlias().accept(this);
             return;
+        }
 
         if (vd.originalType && vd.type == AST.Type.tsize_t)
             origType = vd.originalType;
@@ -1263,41 +1282,38 @@ public:
             size_t varCount;
             bool first = true;
             buf.level++;
-            foreach (m; *sd.members)
+            foreach (vd; sd.fields)
             {
-                if (auto vd = m.isVarDeclaration())
+                if (!memberField(vd) || vd.overlapped)
+                    continue;
+                varCount++;
+
+                if (!vd._init && !vd.type.isTypeBasic() && !vd.type.isTypePointer && !vd.type.isTypeStruct &&
+                    !vd.type.isTypeClass && !vd.type.isTypeDArray && !vd.type.isTypeSArray)
                 {
-                    if (!memberField(vd))
-                        continue;
-                    varCount++;
-
-                    if (!vd._init && !vd.type.isTypeBasic() && !vd.type.isTypePointer && !vd.type.isTypeStruct &&
-                        !vd.type.isTypeClass && !vd.type.isTypeDArray && !vd.type.isTypeSArray)
-                    {
-                        continue;
-                    }
-                    if (vd._init && vd._init.isVoidInitializer())
-                        continue;
-
-                    if (first)
-                    {
-                        buf.writestringln(" :");
-                        first = false;
-                    }
-                    else
-                    {
-                        buf.writestringln(",");
-                    }
-                    writeIdentifier(vd, true);
-                    buf.writeByte('(');
-
-                    if (vd._init)
-                    {
-                        auto e = AST.initializerToExpression(vd._init);
-                        printExpressionFor(vd.type, e, true);
-                    }
-                    buf.printf(")");
+                    continue;
                 }
+                if (vd._init && vd._init.isVoidInitializer())
+                    continue;
+
+                if (first)
+                {
+                    buf.writestringln(" :");
+                    first = false;
+                }
+                else
+                {
+                    buf.writestringln(",");
+                }
+                writeIdentifier(vd, true);
+                buf.writeByte('(');
+
+                if (vd._init)
+                {
+                    auto e = AST.initializerToExpression(vd._init);
+                    printExpressionFor(vd.type, e, true);
+                }
+                buf.printf(")");
             }
             buf.level--;
             buf.writenl();
@@ -1308,49 +1324,43 @@ public:
             {
                 buf.printf("%s(", sd.ident.toChars());
                 first = true;
-                foreach (m; *sd.members)
+                foreach (vd; sd.fields)
                 {
-                    if (auto vd = m.isVarDeclaration())
+                    if (!memberField(vd) || vd.overlapped)
+                        continue;
+                    if (!first)
+                        buf.writestring(", ");
+                    assert(vd.type);
+                    assert(vd.ident);
+                    typeToBuffer(vd.type, vd, true);
+                    // Don't print default value for first parameter to not clash
+                    // with the default ctor defined above
+                    if (!first)
                     {
-                        if (!memberField(vd))
-                            continue;
-                        if (!first)
-                            buf.writestring(", ");
-                        assert(vd.type);
-                        assert(vd.ident);
-                        typeToBuffer(vd.type, vd, true);
-                        // Don't print default value for first parameter to not clash
-                        // with the default ctor defined above
-                        if (!first)
-                        {
-                            buf.writestring(" = ");
-                            printExpressionFor(vd.type, findDefaultInitializer(vd));
-                        }
-                        first = false;
+                        buf.writestring(" = ");
+                        printExpressionFor(vd.type, findDefaultInitializer(vd));
                     }
+                    first = false;
                 }
                 buf.writestring(") :");
                 buf.level++;
                 buf.writenl();
 
                 first = true;
-                foreach (m; *sd.members)
+                foreach (vd; sd.fields)
                 {
-                    if (auto vd = m.isVarDeclaration())
-                    {
-                        if (!memberField(vd))
-                            continue;
+                    if (!memberField(vd) || vd.overlapped)
+                        continue;
 
-                        if (first)
-                            first = false;
-                        else
-                            buf.writestringln(",");
+                    if (first)
+                        first = false;
+                    else
+                        buf.writestringln(",");
 
-                        writeIdentifier(vd, true);
-                        buf.writeByte('(');
-                        writeIdentifier(vd, true);
-                        buf.writeByte(')');
-                    }
+                    writeIdentifier(vd, true);
+                    buf.writeByte('(');
+                    writeIdentifier(vd, true);
+                    buf.writeByte(')');
                 }
                 buf.writenl();
                 buf.writestringln("{}");
@@ -1663,6 +1673,13 @@ public:
         assert(false, "This node type should be handled in the EnumDeclaration");
     }
 
+    override void visit(AST.TupleDeclaration tup)
+    {
+        debug (Debug_DtoH) mixin(traceVisit!tup);
+
+        tup.foreachVar((s) { s.accept(this); });
+    }
+
     /**
      * Prints a member/parameter/variable declaration into `buf`.
      *
@@ -1943,7 +1960,7 @@ public:
         }
         if (tf.parameterList.varargs)
         {
-            if (tf.parameterList.parameters.dim && tf.parameterList.varargs == 1)
+            if (tf.parameterList.parameters.length && tf.parameterList.varargs == 1)
                 buf.writestring(", ");
             buf.writestring("...");
         }
@@ -2278,7 +2295,7 @@ public:
         }
         if (tf.parameterList.varargs)
         {
-            if (tf.parameterList.parameters.dim && tf.parameterList.varargs == 1)
+            if (tf.parameterList.parameters.length && tf.parameterList.varargs == 1)
                 buf.writestring(", ");
             buf.writestring("...");
         }

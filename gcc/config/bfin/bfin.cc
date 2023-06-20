@@ -1,5 +1,5 @@
 /* The Blackfin code generation auxiliary output file.
-   Copyright (C) 2005-2022 Free Software Foundation, Inc.
+   Copyright (C) 2005-2023 Free Software Foundation, Inc.
    Contributed by Analog Devices.
 
    This file is part of GCC.
@@ -4877,7 +4877,7 @@ bfin_handle_l2_attribute (tree *node, tree ARG_UNUSED (name),
       else
 	set_decl_section_name (decl, ".l2.text");
     }
-  else if (TREE_CODE (decl) == VAR_DECL)
+  else if (VAR_P (decl))
     {
       if (DECL_SECTION_NAME (decl) != NULL
 	  && strcmp (DECL_SECTION_NAME (decl),

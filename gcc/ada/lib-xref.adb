@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1998-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1998-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -47,6 +47,7 @@ with Snames;         use Snames;
 with Stringt;        use Stringt;
 with Stand;          use Stand;
 with Table;          use Table;
+with Warnsw;         use Warnsw;
 
 with GNAT.Heap_Sort_G;
 with GNAT.HTable;
@@ -618,15 +619,6 @@ package body Lib.Xref is
          end if;
       end if;
 
-      --  Do not generate references if we are within a postcondition sub-
-      --  program, because the reference does not comes from source, and the
-      --  preanalysis of the aspect has already created an entry for the ALI
-      --  file at the proper source location.
-
-      if Chars (Current_Scope) = Name_uPostconditions then
-         return;
-      end if;
-
       --  Never collect references if not in main source unit. However, we omit
       --  this test if Typ is 'e' or 'k', since these entries are structural,
       --  and it is useful to have them in units that reference packages as
@@ -714,7 +706,7 @@ package body Lib.Xref is
             Set_Referenced (E);
 
          --  For the case where the entity is on the left hand side of an
-         --  assignment statment, we do nothing here.
+         --  assignment statement, we do nothing here.
 
          --  The processing for Analyze_Assignment_Statement will set the
          --  Referenced_As_LHS flag.
@@ -784,7 +776,7 @@ package body Lib.Xref is
                Set_Referenced_As_LHS (E, False);
 
             --  For OUT parameter not covered by the above cases, we simply
-            --  regard it as a non-reference.
+            --  regard it as a reference.
 
             else
                Set_Referenced_As_Out_Parameter (E);
@@ -1280,10 +1272,10 @@ package body Lib.Xref is
       XE : Xref_Entry renames Xrefs.Table (F);
       type M is mod 2**32;
 
-      H : constant M := M (XE.Key.Ent) + 2 ** 7 * M (abs XE.Key.Loc);
+      H : constant M := 3 * M (XE.Key.Ent) + 5 * M (abs XE.Key.Loc);
       --  It would be more natural to write:
       --
-      --    H : constant M := M'Mod (XE.Key.Ent) + 2**7 * M'Mod (XE.Key.Loc);
+      --    H : constant M := 3 * M'Mod (XE.Key.Ent) + 5 * M'Mod (XE.Key.Loc);
       --
       --  But we can't use M'Mod, because it prevents bootstrapping with older
       --  compilers. Loc can be negative, so we do "abs" before converting.

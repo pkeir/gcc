@@ -1,5 +1,5 @@
 /* Tracking equivalence classes and constraints at a point on an execution path.
-   Copyright (C) 2019-2022 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -19,6 +19,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
+#define INCLUDE_MEMORY
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
@@ -30,8 +31,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "selftest.h"
 #include "diagnostic-core.h"
 #include "graphviz.h"
-#include "function.h"
-#include "json.h"
 #include "analyzer/analyzer.h"
 #include "ordered-hash-map.h"
 #include "options.h"
@@ -41,13 +40,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/supergraph.h"
 #include "sbitmap.h"
 #include "bitmap.h"
-#include "tristate.h"
 #include "analyzer/analyzer-logging.h"
 #include "analyzer/call-string.h"
 #include "analyzer/program-point.h"
 #include "analyzer/store.h"
 #include "analyzer/region-model.h"
 #include "analyzer/constraint-manager.h"
+#include "analyzer/call-summary.h"
 #include "analyzer/analyzer-selftests.h"
 #include "tree-pretty-print.h"
 
@@ -422,7 +421,7 @@ dump_cst (pretty_printer *pp, tree cst, bool show_types)
 void
 bounded_range::dump_to_pp (pretty_printer *pp, bool show_types) const
 {
-  if (tree_int_cst_equal (m_lower, m_upper))
+  if (singleton_p ())
     dump_cst (pp, m_lower, show_types);
   else
     {
@@ -2119,6 +2118,17 @@ bool
 constraint_manager::add_bounded_ranges (const svalue *sval,
 					const bounded_ranges *ranges)
 {
+  /* If RANGES is just a singleton, convert this to adding the constraint:
+     "SVAL == {the singleton}".  */
+  if (ranges->get_count () == 1
+      && ranges->get_range (0).singleton_p ())
+    {
+      tree range_cst = ranges->get_range (0).m_lower;
+      const svalue *range_sval
+	= m_mgr->get_or_create_constant_svalue (range_cst);
+      return add_constraint (sval, EQ_EXPR, range_sval);
+    }
+
   sval = sval->unwrap_any_unmergeable ();
 
   /* Nothing can be known about unknown/poisoned values.  */
@@ -2204,6 +2214,137 @@ constraint_manager::get_equiv_class_by_svalue (const svalue *sval,
 	      *out = equiv_class_id (i);
 	    return true;
 	  }
+    }
+  return false;
+}
+
+/* Tries to find a svalue inside another svalue.  */
+
+class sval_finder : public visitor
+{
+public:
+  sval_finder (const svalue *query) : m_query (query), m_found (false)
+  {
+  }
+
+  bool found_query_p ()
+  {
+    return m_found;
+  }
+
+  void visit_region_svalue (const region_svalue *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_constant_svalue (const constant_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_unknown_svalue (const unknown_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_poisoned_svalue (const poisoned_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_setjmp_svalue (const setjmp_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_initial_svalue (const initial_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_unaryop_svalue (const unaryop_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_binop_svalue (const binop_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_sub_svalue (const sub_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_repeated_svalue (const repeated_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_bits_within_svalue (const bits_within_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_unmergeable_svalue (const unmergeable_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_placeholder_svalue (const placeholder_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_widening_svalue (const widening_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_compound_svalue (const compound_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_conjured_svalue (const conjured_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_asm_output_svalue (const asm_output_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_const_fn_result_svalue (const const_fn_result_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+private:
+  const svalue *m_query;
+  bool m_found;
+};
+
+/* Returns true if SVAL is constrained.  */
+
+bool
+constraint_manager::sval_constrained_p (const svalue *sval) const
+{
+  int i;
+  equiv_class *ec;
+  sval_finder finder (sval);
+  FOR_EACH_VEC_ELT (m_equiv_classes, i, ec)
+    {
+      int j;
+      const svalue *iv;
+      FOR_EACH_VEC_ELT (ec->m_vars, j, iv)
+	{
+	  iv->accept (&finder);
+	  if (finder.found_query_p ())
+	    return true;
+	}
     }
   return false;
 }
@@ -2467,6 +2608,66 @@ constraint_manager::eval_condition (equiv_class_id lhs_ec,
   return tristate::unknown ();
 }
 
+/* Return true iff "LHS == RHS" is known to be impossible due to
+   derived conditions.
+
+   Look for an EC containing an EC_VAL of the form (LHS OP CST).
+   If found, see if (LHS OP CST) == EC_VAL is false.
+   If so, we know this condition is false.
+
+   For example, if we already know that
+     (X & CST_MASK) == Y
+   and we're evaluating X == Z, we can test to see if
+     (Z & CST_MASK) == EC_VAL
+   and thus if:
+     (Z & CST_MASK) == Y
+   and reject this if we know that's false.  */
+
+bool
+constraint_manager::impossible_derived_conditions_p (const svalue *lhs,
+						     const svalue *rhs) const
+{
+  int i;
+  equiv_class *ec;
+  FOR_EACH_VEC_ELT (m_equiv_classes, i, ec)
+    {
+      for (const svalue *ec_sval : ec->m_vars)
+	switch (ec_sval->get_kind ())
+	  {
+	  default:
+	    break;
+	  case SK_BINOP:
+	    {
+	      const binop_svalue *iter_binop
+		= as_a <const binop_svalue *> (ec_sval);
+	      if (lhs == iter_binop->get_arg0 ()
+		  && iter_binop->get_type ())
+		if (iter_binop->get_arg1 ()->get_kind () == SK_CONSTANT)
+		  {
+		    /* Try evalating EC_SVAL with LHS
+		       as the value of EC_SVAL's lhs, and see if it's
+		       consistent with existing knowledge.  */
+		    const svalue *subst_bin_op
+		      = m_mgr->get_or_create_binop
+		      (iter_binop->get_type (),
+		       iter_binop->get_op (),
+		       rhs,
+		       iter_binop->get_arg1 ());
+		    tristate t = eval_condition (subst_bin_op,
+						 EQ_EXPR,
+						 ec_sval);
+		    if (t.is_false ())
+		      return true; /* Impossible.  */
+		  }
+	    }
+	    break;
+	  }
+    }
+  /* Not known to be impossible.  */
+  return false;
+}
+
+
 /* Evaluate the condition LHS OP RHS, without modifying this
    constraint_manager (avoiding the creation of equiv_class instances).  */
 
@@ -2516,6 +2717,10 @@ constraint_manager::eval_condition (const svalue *lhs,
       if (result_for_ecs.is_known ())
 	return result_for_ecs;
     }
+
+  if (op == EQ_EXPR
+      && impossible_derived_conditions_p (lhs, rhs))
+    return false;
 
   /* If at least one is not in an EC, we have no constraints
      comparing LHS and RHS yet.
@@ -3041,6 +3246,60 @@ constraint_manager::for_each_fact (fact_visitor *visitor) const
 	  visitor->on_ranges (lhs_sval, iter.m_ranges);
 	}
     }
+}
+
+/* Subclass of fact_visitor for use by
+   constraint_manager::replay_call_summary.  */
+
+class replay_fact_visitor : public fact_visitor
+{
+public:
+  replay_fact_visitor (call_summary_replay &r,
+		       constraint_manager *out)
+  : m_r (r), m_out (out), m_feasible (true)
+  {}
+
+  bool feasible_p () const { return m_feasible; }
+
+  void on_fact (const svalue *lhs, enum tree_code code, const svalue *rhs)
+    final override
+  {
+    const svalue *caller_lhs = m_r.convert_svalue_from_summary (lhs);
+    if (!caller_lhs)
+      return;
+    const svalue *caller_rhs = m_r.convert_svalue_from_summary (rhs);
+    if (!caller_rhs)
+      return;
+    if (!m_out->add_constraint (caller_lhs, code, caller_rhs))
+      m_feasible = false;
+  }
+
+  void on_ranges (const svalue *lhs_sval,
+		  const bounded_ranges *ranges) final override
+  {
+    const svalue *caller_lhs = m_r.convert_svalue_from_summary (lhs_sval);
+    if (!caller_lhs)
+      return;
+    if (!m_out->add_bounded_ranges (caller_lhs, ranges))
+      m_feasible = false;
+  }
+
+private:
+  call_summary_replay &m_r;
+  constraint_manager *m_out;
+  bool m_feasible;
+};
+
+/* Attempt to use R to replay the constraints from SUMMARY into this object.
+   Return true if it is feasible.  */
+
+bool
+constraint_manager::replay_call_summary (call_summary_replay &r,
+					 const constraint_manager &summary)
+{
+  replay_fact_visitor v (r, this);
+  summary.for_each_fact (&v);
+  return v.feasible_p ();
 }
 
 /* Assert that this object is valid.  */
@@ -3923,10 +4182,10 @@ test_equality ()
 static void
 test_many_constants ()
 {
-  program_point point (program_point::origin ());
+  region_model_manager mgr;
+  program_point point (program_point::origin (mgr));
   tree a = build_global_decl ("a", integer_type_node);
 
-  region_model_manager mgr;
   region_model model (&mgr);
   auto_vec<tree> constants;
   for (int i = 0; i < 20; i++)
@@ -4382,6 +4641,94 @@ test_bounded_ranges ()
 	     mgr.get_or_create_point (ch1));
 }
 
+/* Verify that we can handle sufficiently simple bitmasking operations.  */
+
+static void
+test_bits (void)
+{
+  region_model_manager mgr;
+
+  tree int_0 = build_int_cst (integer_type_node, 0);
+  tree int_0x80 = build_int_cst (integer_type_node, 0x80);
+  tree int_0xff = build_int_cst (integer_type_node, 0xff);
+  tree x = build_global_decl ("x", integer_type_node);
+
+  tree x_bit_and_0x80 = build2 (BIT_AND_EXPR, integer_type_node, x, int_0x80);
+  tree x_bit_and_0xff = build2 (BIT_AND_EXPR, integer_type_node, x, int_0xff);
+
+  /* "x & 0x80 == 0x80".  */
+  {
+    region_model model (&mgr);
+    ADD_SAT_CONSTRAINT (model, x_bit_and_0x80, EQ_EXPR, int_0x80);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0x80);
+  }
+
+  /* "x & 0x80 != 0x80".  */
+  {
+    region_model model (&mgr);
+    ADD_SAT_CONSTRAINT (model, x_bit_and_0x80, NE_EXPR, int_0x80);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0x80);
+  }
+
+  /* "x & 0x80 == 0".  */
+  {
+    region_model model (&mgr);
+
+    ADD_SAT_CONSTRAINT (model, x_bit_and_0x80, EQ_EXPR, int_0);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0x80);
+  }
+
+  /* "x & 0x80 != 0".  */
+  {
+    region_model model (&mgr);
+    ADD_SAT_CONSTRAINT (model, x_bit_and_0x80, NE_EXPR, int_0);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0x80);
+  }
+
+  /* More that one bit in the mask.  */
+
+  /* "x & 0xff == 0x80".  */
+  {
+    region_model model (&mgr);
+    ADD_SAT_CONSTRAINT (model, x_bit_and_0xff, EQ_EXPR, int_0x80);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0x80);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0xff);
+  }
+
+  /* "x & 0xff != 0x80".  */
+  {
+    region_model model (&mgr);
+    ADD_SAT_CONSTRAINT (model, x_bit_and_0xff, NE_EXPR, int_0x80);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0x80);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0xff);
+  }
+
+  /* "x & 0xff == 0".  */
+  {
+    region_model model (&mgr);
+
+    ADD_SAT_CONSTRAINT (model, x_bit_and_0xff, EQ_EXPR, int_0);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0x80);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0xff);
+  }
+
+  /* "x & 0xff != 0".  */
+  {
+    region_model model (&mgr);
+    ADD_SAT_CONSTRAINT (model, x_bit_and_0xff, NE_EXPR, int_0);
+    ASSERT_CONDITION_FALSE (model, x, EQ_EXPR, int_0);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0x80);
+    ASSERT_CONDITION_UNKNOWN (model, x, EQ_EXPR, int_0xff);
+  }
+}
+
 /* Run the selftests in this file, temporarily overriding
    flag_analyzer_transitivity with TRANSITIVITY.  */
 
@@ -4405,6 +4752,7 @@ run_constraint_manager_tests (bool transitivity)
   test_purging ();
   test_bounded_range ();
   test_bounded_ranges ();
+  test_bits ();
 
   flag_analyzer_transitivity = saved_flag_analyzer_transitivity;
 }

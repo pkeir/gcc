@@ -1,5 +1,5 @@
 /* Warn on problematic uses of alloca and variable length arrays.
-   Copyright (C) 2016-2022 Free Software Foundation, Inc.
+   Copyright (C) 2016-2023 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez <aldyh@redhat.com>.
 
 This file is part of GCC.
@@ -58,8 +58,8 @@ public:
   pass_walloca (gcc::context *ctxt)
     : gimple_opt_pass(pass_data_walloca, ctxt), xlimit_certain_p (false)
   {}
-  opt_pass *clone () { return new pass_walloca (m_ctxt); }
-  void set_pass_param (unsigned int n, bool param)
+  opt_pass *clone () final override { return new pass_walloca (m_ctxt); }
+  void set_pass_param (unsigned int n, bool param) final override
     {
       gcc_assert (n == 0);
       // Set to true to enable only warnings for alloca calls that
@@ -69,8 +69,8 @@ public:
       // the "may be too large" kind.
       xlimit_certain_p = param;
     }
-  virtual bool gate (function *);
-  virtual unsigned int execute (function *);
+  bool gate (function *) final override;
+  unsigned int execute (function *) final override;
 
  private:
   // Set to TRUE the first time we run this pass on a function.
@@ -217,12 +217,14 @@ alloca_call_type (gimple *stmt, bool is_vla)
   int_range_max r;
   if (warn_limit_specified_p (is_vla)
       && TREE_CODE (len) == SSA_NAME
+      && types_compatible_p (TREE_TYPE (len), size_type_node)
       && get_range_query (cfun)->range_of_expr (r, len, stmt)
       && !r.varying_p ())
     {
       // The invalid bits are anything outside of [0, MAX_SIZE].
-      int_range<2> invalid_range (build_int_cst (size_type_node, 0),
-				  build_int_cst (size_type_node, max_size),
+      int_range<2> invalid_range (size_type_node,
+				  wi::shwi (0, TYPE_PRECISION (size_type_node)),
+				  wi::shwi (max_size, TYPE_PRECISION (size_type_node)),
 				  VR_ANTI_RANGE);
 
       r.intersect (invalid_range);
@@ -255,7 +257,7 @@ in_loop_p (gimple *stmt)
 unsigned int
 pass_walloca::execute (function *fun)
 {
-  gimple_ranger *ranger = enable_ranger (fun);
+  enable_ranger (fun);
   basic_block bb;
   FOR_EACH_BB_FN (bb, fun)
     {
@@ -378,7 +380,6 @@ pass_walloca::execute (function *fun)
 	    }
 	}
     }
-  ranger->export_global_ranges ();
   disable_ranger (fun);
   return 0;
 }

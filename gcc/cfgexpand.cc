@@ -1,5 +1,5 @@
 /* A pass for lowering trees to RTL.
-   Copyright (C) 2004-2022 Free Software Foundation, Inc.
+   Copyright (C) 2004-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -3720,7 +3720,18 @@ expand_value_return (rtx val)
         mode = promote_function_mode (type, old_mode, &unsignedp, funtype, 1);
 
       if (mode != old_mode)
-	val = convert_modes (mode, old_mode, val, unsignedp);
+	{
+	  /* Some ABIs require scalar floating point modes to be returned
+	     in a wider scalar integer mode.  We need to explicitly
+	     reinterpret to an integer mode of the correct precision
+	     before extending to the desired result.  */
+	  if (SCALAR_INT_MODE_P (mode)
+	      && SCALAR_FLOAT_MODE_P (old_mode)
+	      && known_gt (GET_MODE_SIZE (mode), GET_MODE_SIZE (old_mode)))
+	    val = convert_float_to_wider_int (mode, old_mode, val);
+	  else
+	    val = convert_modes (mode, old_mode, val, unsignedp);
+	}
 
       if (GET_CODE (return_reg) == PARALLEL)
 	emit_group_load (return_reg, val, type, int_size_in_bytes (type));
@@ -3742,7 +3753,7 @@ expand_return (tree retval)
   tree retval_rhs;
 
   /* If function wants no value, give it none.  */
-  if (TREE_CODE (TREE_TYPE (TREE_TYPE (current_function_decl))) == VOID_TYPE)
+  if (VOID_TYPE_P (TREE_TYPE (TREE_TYPE (current_function_decl))))
     {
       expand_normal (retval);
       expand_null_return ();
@@ -6280,6 +6291,15 @@ discover_nonconstant_array_refs_r (tree * tp, int *walk_subtrees,
 
   if (IS_TYPE_OR_DECL_P (t))
     *walk_subtrees = 0;
+  else if (REFERENCE_CLASS_P (t) && TREE_THIS_VOLATILE (t))
+    {
+      t = get_base_address (t);
+      if (t && DECL_P (t)
+	  && DECL_MODE (t) != BLKmode
+	  && !TREE_ADDRESSABLE (t))
+	bitmap_set_bit (forced_stack_vars, DECL_UID (t));
+      *walk_subtrees = 0;
+    }
   else if (TREE_CODE (t) == ARRAY_REF || TREE_CODE (t) == ARRAY_RANGE_REF)
     {
       while (((TREE_CODE (t) == ARRAY_REF || TREE_CODE (t) == ARRAY_RANGE_REF)
@@ -6573,7 +6593,7 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual unsigned int execute (function *);
+  unsigned int execute (function *) final override;
 
 }; // class pass_expand
 

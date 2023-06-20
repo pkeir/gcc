@@ -1,5 +1,5 @@
 /* Parser for GIMPLE.
-   Copyright (C) 2016-2022 Free Software Foundation, Inc.
+   Copyright (C) 2016-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -294,8 +294,7 @@ c_parser_parse_gimple_body (c_parser *cparser, char *gimple_pass,
       FOR_EACH_BB_FN (bb, cfun)
 	if (EDGE_COUNT (bb->succs) == 0)
 	  {
-	    gimple *last = last_stmt (bb);
-	    if (gswitch *sw = safe_dyn_cast <gswitch *> (last))
+	    if (gswitch *sw = safe_dyn_cast <gswitch *> (*gsi_last_bb (bb)))
 	      for (unsigned i = 0; i < gimple_switch_num_labels (sw); ++i)
 		{
 		  basic_block label_bb = gimple_switch_label_bb (cfun, sw, i);
@@ -364,6 +363,16 @@ c_parser_parse_gimple_body (c_parser *cparser, char *gimple_pass,
       cgraph_node::get_create (cfun->decl);
       cgraph_edge::rebuild_edges ();
     }
+
+  /* Perform IL validation and if any error is found abort compilation
+     of this function by zapping its body.  */
+  if ((cfun->curr_properties & PROP_cfg)
+      && verify_gimple_in_cfg (cfun, false, false))
+    init_empty_tree_cfg ();
+  else if (!(cfun->curr_properties & PROP_cfg)
+	   && verify_gimple_in_seq (gimple_body (current_function_decl), false))
+    gimple_set_body (current_function_decl, NULL);
+
   dump_function (TDI_gimple, current_function_decl);
 }
 
@@ -1332,6 +1341,7 @@ c_parser_gimple_call_internal (gimple_parser &parser)
 	     exprlist.address ());
 	  expr.original_code = ERROR_MARK;
 	  expr.original_type = NULL;
+	  expr.m_decimal = 0;
 	}
     }
   return expr;
@@ -1751,6 +1761,7 @@ c_parser_gimple_postfix_expression_after_primary (gimple_parser &parser,
 	    finish = c_parser_tokens_buf (parser, 0)->location;
 	    expr.value = build_array_ref (op_loc, expr.value, idx);
 	    set_c_expr_source_range (&expr, start, finish);
+	    expr.m_decimal = 0;
 
 	    expr.original_code = ERROR_MARK;
 	    expr.original_type = NULL;
@@ -1774,6 +1785,7 @@ c_parser_gimple_postfix_expression_after_primary (gimple_parser &parser,
 	    expr.value = build_call_array_loc
 		(expr_loc, TREE_TYPE (TREE_TYPE (expr.value)),
 		 expr.value, exprlist.length (), exprlist.address ());
+	    expr.m_decimal = 0;
 	    expr.original_code = ERROR_MARK;
 	    expr.original_type = NULL;
 	    break;
@@ -1802,6 +1814,7 @@ c_parser_gimple_postfix_expression_after_primary (gimple_parser &parser,
 	    expr.value = build_component_ref (op_loc, expr.value, ident,
 					      comp_loc, UNKNOWN_LOCATION);
 	    set_c_expr_source_range (&expr, start, finish);
+	    expr.m_decimal = 0;
 	    expr.original_code = ERROR_MARK;
 	    if (TREE_CODE (expr.value) != COMPONENT_REF)
 	      expr.original_type = NULL;
@@ -1851,6 +1864,7 @@ c_parser_gimple_postfix_expression_after_primary (gimple_parser &parser,
 					      ident, comp_loc,
 					      expr.get_location ());
 	    set_c_expr_source_range (&expr, start, finish);
+	    expr.m_decimal = 0;
 	    expr.original_code = ERROR_MARK;
 	    if (TREE_CODE (expr.value) != COMPONENT_REF)
 	      expr.original_type = NULL;
@@ -2458,7 +2472,7 @@ c_finish_gimple_return (location_t loc, tree retval)
 
   if (! retval)
     current_function_returns_null = 1;
-  else if (valtype == 0 || TREE_CODE (valtype) == VOID_TYPE)
+  else if (valtype == 0 || VOID_TYPE_P (valtype))
     {
       current_function_returns_null = 1;
       if (TREE_CODE (TREE_TYPE (retval)) != VOID_TYPE)

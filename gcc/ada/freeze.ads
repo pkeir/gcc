@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2022, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -176,15 +176,6 @@ package Freeze is
    --  it involves calls to other overriding primitives. Late_Overriding is
    --  True when we are processing the body of a primitive with no previous
    --  spec defined after R is frozen (see Check_Dispatching_Operation).
-
-   function Is_Full_Access_Aggregate (N : Node_Id) return Boolean;
-   --  If a full access object is initialized with an aggregate or is assigned
-   --  an aggregate, we have to prevent a piecemeal access or assignment to the
-   --  object, even if the aggregate is to be expanded. We create a temporary
-   --  for the aggregate, and assign the temporary instead, so that the back
-   --  end can generate an atomic move for it. This is only done in the context
-   --  of an object declaration or an assignment. Function is a noop and
-   --  returns false in other contexts.
 
    procedure Explode_Initialization_Compound_Statement (E : Entity_Id);
    --  If Initialization_Statements (E) is an N_Compound_Statement, insert its
