@@ -1715,6 +1715,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{ return _M_refcount._M_less(__rhs._M_refcount); }
       /// @}
 
+      template<typename _Tp1>
+      bool
+      owner_equal(__shared_ptr<_Tp1, _Lp> const& __rhs) const noexcept
+      { return _M_refcount == __rhs._M_refcount; }
+
+      template<typename _Tp1>
+      bool
+      owner_equal(__weak_ptr<_Tp1, _Lp> const& __rhs) const noexcept
+      { return _M_refcount == __rhs._M_refcount; }
+
     protected:
       // This constructor is non-standard, it is used by allocate_shared.
       template<typename _Alloc, typename... _Args>
