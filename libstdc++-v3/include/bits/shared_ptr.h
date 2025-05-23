@@ -909,6 +909,35 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     : public _Sp_owner_less<weak_ptr<_Tp>, shared_ptr<_Tp>>
     { };
 
+  struct owner_equal
+  {
+    template<typename _Tp1, typename _Tp2>
+    bool
+    operator()(const shared_ptr<_Tp1>& __lhs,
+               const shared_ptr<_Tp2>& __rhs) const noexcept
+    { return __lhs.owner_equal(__rhs); }
+
+    template<typename _Tp1, typename _Tp2>
+    bool
+    operator()(const shared_ptr<_Tp1>& __lhs,
+               const   weak_ptr<_Tp2>& __rhs) const noexcept
+    { return __lhs.owner_equal(__rhs); }
+
+    template<typename _Tp1, typename _Tp2>
+    bool
+    operator()(const   weak_ptr<_Tp1>& __lhs,
+               const shared_ptr<_Tp2>& __rhs) const noexcept
+    { return __lhs.owner_equal(__rhs); }
+
+    template<typename _Tp1, typename _Tp2>
+    bool
+    operator()(const weak_ptr<_Tp1>& __lhs,
+               const weak_ptr<_Tp2>& __rhs)   const noexcept
+    { return __lhs.owner_equal(__rhs); }
+
+    using is_transparent = void;
+  };
+
   /**
    * @brief Base class allowing use of the member function `shared_from_this`.
    * @headerfile memory
