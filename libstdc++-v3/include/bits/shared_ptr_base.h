@@ -2108,6 +2108,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	owner_before(const __weak_ptr<_Tp1, _Lp>& __rhs) const noexcept
 	{ return _M_refcount._M_less(__rhs._M_refcount); }
 
+      template<typename _Tp1>
+      bool
+      owner_equal(const __shared_ptr<_Tp1, _Lp> & __rhs) const noexcept
+      { return _M_refcount == __rhs._M_refcount; }
+
+      template<typename _Tp1>
+      bool
+      owner_equal(const __weak_ptr<_Tp1, _Lp> & __rhs) const noexcept
+      { return _M_refcount == __rhs._M_refcount; }
+
       void
       reset() noexcept
       { __weak_ptr().swap(*this); }
