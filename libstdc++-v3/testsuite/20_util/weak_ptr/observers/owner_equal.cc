@@ -18,7 +18,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// 20.8.13.3 Template class weak_ptr [util.smartptr.weak]
+// 20.3.2.3 Template class weak_ptr [util.smartptr.weak]
 
 #include <memory>
 #include <testsuite_hooks.h>
