@@ -41,7 +41,7 @@ test01()
   // test empty shared_ptrs compare equivalent
   std::shared_ptr<A> p1;
   std::shared_ptr<B> p2;
-  VERIFY( p1.owner_equal(p2) && p2.owner_equal(p1) );
+  VERIFY( p1.owner_hash() == p2.owner_hash() );
 }
 
 
@@ -52,26 +52,23 @@ test02()
   std::shared_ptr<A> a0;
 
   std::shared_ptr<A> a1(new A);
-  VERIFY( !a1.owner_equal(a0) && !a0.owner_equal(a1) );
+  VERIFY( a1.owner_hash() != a0.owner_hash() );
 
   std::shared_ptr<B> b1(new B);
-  VERIFY( !a1.owner_equal(b1) && !b1.owner_equal(a1) );
+  VERIFY( a1.owner_hash() != b1.owner_hash() );
 
   std::shared_ptr<A> a2(a1);
-  VERIFY( a1.owner_equal(a2) && a2.owner_equal(a1) );
+  VERIFY( a1.owner_hash() == a2.owner_hash() );
   a2 = b1;
-  VERIFY( b1.owner_equal(a2) && a2.owner_equal(b1) );
+  VERIFY( b1.owner_hash() == a2.owner_hash() );
 
   std::weak_ptr<A> w1(a1);
-  VERIFY( a1.owner_equal(w1) && w1.owner_equal(a1) );
+  VERIFY( a1.owner_hash() == w1.owner_hash() );
   std::weak_ptr<A> w2(a2);
-  VERIFY( b1.owner_equal(w2) && w2.owner_equal(b1) );
+  VERIFY( b1.owner_hash() == w2.owner_hash() );
 
-  static_assert( noexcept(a1.owner_equal(a0)), "" );
-  static_assert( noexcept(a1.owner_equal(b1)), "" );
-  static_assert( noexcept(b1.owner_equal(a1)), "" );
-  static_assert( noexcept(a1.owner_equal(w1)), "" );
-  static_assert( noexcept(b1.owner_equal(w1)), "" );
+  static_assert( noexcept(a1.owner_hash()), "" );
+  static_assert( noexcept(b1.owner_hash()), "" );
 }
 
 // Aliasing
@@ -80,7 +77,7 @@ test03()
 {
   std::shared_ptr<A> p1(new A());
   std::shared_ptr<int> p2(p1, &p1->i);
-  VERIFY( p1.owner_equal(p2) && p2.owner_equal(p1) );
+  VERIFY( p1.owner_hash() == p2.owner_hash() );
 }
 
 int
