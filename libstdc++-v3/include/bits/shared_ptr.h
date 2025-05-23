@@ -909,6 +909,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     : public _Sp_owner_less<weak_ptr<_Tp>, shared_ptr<_Tp>>
     { };
 
+#if __cplusplus > 202302L
+
   /**
    * @brief Provides ownership-based hashing.
    * @headerfile memory
@@ -961,6 +963,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     using is_transparent = void;
   };
+
+#endif
 
   /**
    * @brief Base class allowing use of the member function `shared_from_this`.
