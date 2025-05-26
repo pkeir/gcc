@@ -1716,6 +1716,19 @@ ix86_asm_output_function_label (FILE *out_file, const char *fname,
     }
 }
 
+/* Output a user-defined label.  In AT&T syntax, registers are prefixed
+   with %, so labels require no punctuation.  In Intel syntax, registers
+   are unprefixed, so labels may clash with registers or other operators,
+   and require quoting.  */
+void
+ix86_asm_output_labelref (FILE *file, const char *prefix, const char *label)
+{
+  if (ASSEMBLER_DIALECT == ASM_ATT)
+    fprintf (file, "%s%s", prefix, label);
+  else
+    fprintf (file, "\"%s%s\"", prefix, label);
+}
+
 /* Implementation of call abi switching target hook. Specific to FNDECL
    the specific call register sets are set.  See also
    ix86_conditional_register_usage for more details.  */
@@ -25172,12 +25185,18 @@ ix86_builtin_vectorization_cost (enum vect_cost_for_stmt type_of_cost,
 	  /* One vinserti128 for combining two SSE vectors for AVX256.  */
 	  else if (GET_MODE_BITSIZE (mode) == 256)
 	    return ((n - 2) * ix86_cost->sse_op
-		    + ix86_vec_cost (mode, ix86_cost->addss));
+		    + ix86_vec_cost (mode, ix86_cost->sse_op));
 	  /* One vinserti64x4 and two vinserti128 for combining SSE
 	     and AVX256 vectors to AVX512.  */
 	  else if (GET_MODE_BITSIZE (mode) == 512)
-	    return ((n - 4) * ix86_cost->sse_op
-		    + 3 * ix86_vec_cost (mode, ix86_cost->addss));
+	    {
+	      machine_mode half_mode
+		= mode_for_vector (GET_MODE_INNER (mode),
+				   GET_MODE_NUNITS (mode) / 2).require ();
+	      return ((n - 4) * ix86_cost->sse_op
+		      + 2 * ix86_vec_cost (half_mode, ix86_cost->sse_op)
+		      + ix86_vec_cost (mode, ix86_cost->sse_op));
+	    }
 	  gcc_unreachable ();
 	}
 
@@ -26035,7 +26054,22 @@ ix86_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
 	      else
 		{
 		  m_num_gpr_needed[where]++;
-		  stmt_cost += COSTS_N_INSNS (ix86_cost->integer_to_sse) / 2;
+
+		  int cost = COSTS_N_INSNS (ix86_cost->integer_to_sse) / 2;
+
+		  /* For integer construction, the number of actual GPR -> XMM
+		     moves will be somewhere between 0 and n.
+		     We do not have very good idea about actual number, since
+		     the source may be a constant, memory or a chain of
+		     instructions that will be later converted by
+		     scalar-to-vector pass.  */
+		  if (kind == vec_construct
+		      && GET_MODE_BITSIZE (mode) == 256)
+		    cost *= 2;
+		  else if (kind == vec_construct
+			   && GET_MODE_BITSIZE (mode) == 512)
+		    cost *= 3;
+		  stmt_cost += cost;
 		}
 	    }
 	}

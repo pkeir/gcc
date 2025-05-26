@@ -193,6 +193,33 @@ class cxx_format_postprocessor : public format_postprocessor
   deferred_printed_type m_type_b;
 };
 
+/* Constructor and destructor for cxx_dump_pretty_printer, defined here to
+   avoid needing to move cxx_format_postprocessor into the header as well.  */
+
+cxx_dump_pretty_printer::
+cxx_dump_pretty_printer (int phase)
+  : phase (phase)
+{
+  outf = dump_begin (phase, &flags);
+  if (outf)
+    {
+      pp_format_decoder (this) = cp_printer;
+      /* This gets deleted in ~pretty_printer.  */
+      pp_format_postprocessor (this) = new cxx_format_postprocessor ();
+      set_output_stream (outf);
+    }
+}
+
+cxx_dump_pretty_printer::
+~cxx_dump_pretty_printer ()
+{
+  if (outf)
+    {
+      pp_flush (this);
+      dump_end (phase, outf);
+    }
+}
+
 /* Return the in-scope template that's currently being parsed, or
    NULL_TREE otherwise.  */
 
@@ -541,12 +568,13 @@ dump_template_bindings (cxx_pretty_printer *pp, tree parms, tree args,
 	  /* If the template argument repeats the template parameter (T = T),
 	     skip the parameter.*/
 	  if (arg && TREE_CODE (arg) == TEMPLATE_TYPE_PARM
-		&& TREE_CODE (parm_i) == TREE_LIST
-		&& TREE_CODE (TREE_VALUE (parm_i)) == TYPE_DECL
-		&& TREE_CODE (TREE_TYPE (TREE_VALUE (parm_i)))
-		     == TEMPLATE_TYPE_PARM
-		&& DECL_NAME (TREE_VALUE (parm_i))
-		     == DECL_NAME (TREE_CHAIN (arg)))
+	      && arg == TYPE_MAIN_VARIANT (arg)
+	      && TREE_CODE (parm_i) == TREE_LIST
+	      && TREE_CODE (TREE_VALUE (parm_i)) == TYPE_DECL
+	      && (TREE_CODE (TREE_TYPE (TREE_VALUE (parm_i)))
+		  == TEMPLATE_TYPE_PARM)
+	      && (DECL_NAME (TREE_VALUE (parm_i))
+		  == DECL_NAME (TYPE_STUB_DECL (arg))))
 	    continue;
 
 	  semicolon_or_introducer ();

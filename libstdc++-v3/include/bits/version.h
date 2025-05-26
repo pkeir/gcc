@@ -1958,6 +1958,16 @@
 #endif /* !defined(__cpp_lib_copyable_function) && defined(__glibcxx_want_copyable_function) */
 #undef __glibcxx_want_copyable_function
 
+#if !defined(__cpp_lib_function_ref)
+# if (__cplusplus >  202302L)
+#  define __glibcxx_function_ref 202306L
+#  if defined(__glibcxx_want_all) || defined(__glibcxx_want_function_ref)
+#   define __cpp_lib_function_ref 202306L
+#  endif
+# endif
+#endif /* !defined(__cpp_lib_function_ref) && defined(__glibcxx_want_function_ref) */
+#undef __glibcxx_want_function_ref
+
 #if !defined(__cpp_lib_out_ptr)
 # if (__cplusplus >= 202100L)
 #  define __glibcxx_out_ptr 202311L
@@ -2192,6 +2202,16 @@
 # endif
 #endif /* !defined(__cpp_lib_modules) && defined(__glibcxx_want_modules) */
 #undef __glibcxx_want_modules
+
+#if !defined(__cpp_lib_indirect)
+# if (__cplusplus >  202302L) && _GLIBCXX_HOSTED
+#  define __glibcxx_indirect 202502L
+#  if defined(__glibcxx_want_all) || defined(__glibcxx_want_indirect)
+#   define __cpp_lib_indirect 202502L
+#  endif
+# endif
+#endif /* !defined(__cpp_lib_indirect) && defined(__glibcxx_want_indirect) */
+#undef __glibcxx_want_indirect
 
 #if !defined(__cpp_lib_smart_ptr_owner_equality)
 # if (__cplusplus >  202302L) && _GLIBCXX_HOSTED

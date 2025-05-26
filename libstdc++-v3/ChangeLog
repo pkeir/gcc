@@ -1,3 +1,82 @@
+2025-05-23  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/120384
+	* include/bits/stl_algo.h (__unique_copy): Remove all
+	_BinaryPredicateConcept concept checks.
+	(unique_copy): Check _BinaryPredicateConcept in overload that
+	takes a predicate.
+	* testsuite/25_algorithms/unique_copy/120384.cc: New test.
+
+2025-05-23  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/std/type_traits (is_constant_evaluated): Add
+	always_inline attribute.
+
+2025-05-23  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/17_intro/names.cc [__sun__] (a, i, n): Undefine.
+
+2025-05-23  Stefan Schulze Frielinghaus  <stefansf@gcc.gnu.org>
+
+	* testsuite/std/format/parse_ctx.cc: Fix typo for bfloat16 guard.
+
+2025-05-22  Jonathan Wakely  <jwakely@redhat.com>
+	    Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	* include/bits/allocated_ptr.h (_Scoped_allocation): New class
+	template.
+
+2025-05-22  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/util/pstl/test_utils.h (ForwardIterator::operator++):
+	Fix return type.
+	(BidirectionalIterator::operator++): Likewise.
+	(BidirectionalIterator::operator--): Likewise.
+
+2025-05-22  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/120367
+	* include/bits/stl_vector.h (_M_range_initialize): Initialize
+	_M_impl._M_finish.
+	* testsuite/23_containers/vector/cons/from_range.cc: Check with
+	a type that throws on construction.
+	exceptions during construction.
+
+2025-05-21  Alexandre Oliva  <oliva@adacore.com>
+
+	* testsuite/21_strings/basic_string/numeric_conversions/char/stold.cc:
+	Guard non-wide stold calls with conditions for it to be
+	defined.
+	* testsuite/27_io/basic_ostream/inserters_arithmetic/char/hexfloat.cc:
+	Likewise.
+
+2025-05-21  Xℹ Ruoyao  <xry111@mengyan1223.wang>
+
+	PR libstdc++/81806
+	* include/ext/pb_ds/detail/bin_search_tree_/split_join_fn_imps.hpp
+	(split_finish): Use maintained size, instead of calling
+	std::distance.
+
+2025-05-21  Xℹ Ruoyao  <xry111@mengyan1223.wang>
+
+	* include/ext/pb_ds/detail/rb_tree_map_/node.hpp
+	(rb_tree_node_::size_type): New typedef.
+	(rb_tree_node_::m_subtree_size): New field.
+	* include/ext/pb_ds/detail/splay_tree_/node.hpp
+	(splay_tree_node_::size_type): New typedef.
+	(splay_tree_node_::m_subtree_size): New field.
+	* include/ext/pb_ds/detail/bin_search_tree_/bin_search_tree_.hpp
+	(PB_DS_BIN_TREE_NAME::update_subtree_size): Declare new member
+	function.
+	* include/ext/pb_ds/detail/bin_search_tree_/rotate_fn_imps.hpp
+	(update_subtree_size): Define.
+	(apply_update, update_to_top): Call update_subtree_size.
+
+2025-05-21  Xℹ Ruoyao  <xry111@mengyan1223.wang>
+
+	* include/ext/pb_ds/detail/bin_search_tree_/insert_fn_imps.hpp
+	(insert_leaf_new, insert_imp_empty): remove redundant statements.
+
 2025-05-20  Tomasz Kamiński  <tkaminsk@redhat.com>
 
 	* include/bits/chrono_io.h (_ChronoSpec::_M_locale_specific):

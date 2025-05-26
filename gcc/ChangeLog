@@ -1,3 +1,351 @@
+2025-05-25  Michael J. Eager  <eager@eagercon.com>
+
+	PR target/86772
+	Tracking CVE-2017-5753
+	* config/microblaze/microblaze.cc (TARGET_HAVE_SPECULATION_SAFE_VALUE):
+	Define to speculation_save_value_not_needed
+
+2025-05-25  Jan Hubicka  <hubicka@ucw.cz>
+
+	* config/i386/i386.cc (ix86_builtin_vectorization_cost):
+	use sse_op instead of addss to cost vinsertti128 and vinsertti64x4;
+	compute correct mode of vinsertti128.
+	(ix86_vector_costs::add_stmt_cost): For integer 256bit and 512bit
+	vector constructions account more integer_to_sse moves.
+
+2025-05-25  LIU Hao  <lh_mouse@126.com>
+
+	PR target/53929
+	PR target/80881
+	* config/i386/i386-protos.h (ix86_asm_output_labelref): Declare new
+	function for quoting user-defined symbols in Intel syntax.
+	* config/i386/i386.cc (ix86_asm_output_labelref): Implement it.
+	* config/i386/i386.h (ASM_OUTPUT_LABELREF): Use it.
+	* config/i386/cygming.h (ASM_OUTPUT_LABELREF): Use it.
+
+2025-05-24  Shreya Munnangi  <smunnangi1@ventanamicro.com>
+
+	* config/riscv/riscv.cc (synthesize_and): Use a srl+andi+sll
+	sequence when the mask fits in a simm12 after shifting by the
+	number of trailing zeros.
+	Co-authored-by: Jeff Law <jlaw@ventanamicro.com>
+
+2025-05-24  Pan Li  <pan2.li@intel.com>
+
+	* config/riscv/riscv-v.cc (expand_vx_binary_vec_dup_vec): Add new
+	case for IOR op.
+	(expand_vx_binary_vec_vec_dup): Ditto.
+	* config/riscv/riscv.cc (riscv_rtx_costs): Ditto.
+	* config/riscv/vector-iterators.md: Add new op or to no_shift_vx_ops.
+
+2025-05-23  Andi Kleen  <ak@gcc.gnu.org>
+
+	* doc/install.texi: Document bootstrap-native.
+
+2025-05-23  Andi Kleen  <ak@gcc.gnu.org>
+
+	PR middle-end/114563
+	PR c++/119387
+	* ggc-page.cc (struct free_list): New structure.
+	(struct page_entry): Point to free_list.
+	(find_free_list): New function.
+	(find_free_list_order): Dito.
+	(alloc_page): Use specific free_list.
+	(release_pages): Dito.
+	(do_release_pages): Dito.
+	(init_ggc): Dito.
+	(ggc_print_statistics): Print overflow stat.
+	(ggc_pch_read): Use specific free list.
+
+2025-05-23  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* doc/implement-c.texi (C Implementation): Add missing menu items.
+
+2025-05-23  Robin Dapp  <rdapp@ventanamicro.com>
+
+	* common/config/riscv/riscv-common.cc (riscv_subset_list::parse_base_ext):
+	Adjust error message.
+	(riscv_handle_option): Parse as CPU string first.
+	(riscv_expand_arch): Ditto.
+	* doc/invoke.texi: Document.
+
+2025-05-23  Robin Dapp  <rdapp@ventanamicro.com>
+
+	* config/riscv/riscv-v.cc (autovectorize_vector_modes): Return
+	user-specified mode if available.
+	* config/riscv/riscv.opt: New param.
+
+2025-05-23  Robin Dapp  <rdapp@ventanamicro.com>
+
+	* config/riscv/riscv.cc (singleton_vxrm_need): Init
+	saved_vxrm_mode.
+
+2025-05-23  Robin Dapp  <rdapp@ventanamicro.com>
+
+	* config/riscv/riscv-vector-costs.cc (compute_estimated_lmul):
+	Always use vect_vf_for_cost and TARGET_MIN_VLEN.
+
+2025-05-23  Dhruv Chawla  <dhruvc@nvidia.com>
+	    Richard Sandiford  <richard.sandiford@arm.com>
+
+	* expmed.cc (expand_rotate_as_vec_perm): Avoid a no-op move if the
+	target already provided the result in the expected register.
+	* config/aarch64/aarch64.cc (aarch64_vectorize_vec_perm_const):
+	Avoid forcing subregs into fresh registers unnecessarily.
+	* config/aarch64/aarch64-sve.md: Add define_split for rotate.
+	(*v_revvnx8hi): New pattern.
+
+2025-05-23  Dhruv Chawla  <dhruvc@nvidia.com>
+	    Richard Sandiford  <richard.sandiford@arm.com>
+
+	* config/aarch64/aarch64-sve.md (@aarch64_adr<mode>_shift):
+	Match lowered form of ashift.
+	(*aarch64_adr<mode>_shift): Likewise.
+	(*aarch64_adr_shift_sxtw): Likewise.
+	(*aarch64_adr_shift_uxtw): Likewise.
+	(<ASHIFT:optab><mode>3): Check amount instead of operands[2] in
+	aarch64_sve_<lr>shift_operand.
+	(v<optab><mode>3): Generate unpredicated shifts for constant
+	operands.
+	(@aarch64_pred_<optab><mode>): Convert to a define_expand.
+	(*aarch64_pred_<optab><mode>): Create define_insn_and_split pattern
+	from @aarch64_pred_<optab><mode>.
+	(*post_ra_v_ashl<mode>3): Rename to ...
+	(aarch64_vashl<mode>3_const): ... this and remove reload requirement.
+	(*post_ra_v_<optab><mode>3): Rename to ...
+	(aarch64_v<optab><mode>3_const): ... this and remove reload
+	requirement.
+	* config/aarch64/aarch64-sve2.md
+	(@aarch64_sve_add_<sve_int_op><mode>): Match lowered form of
+	SHIFTRT.
+	(*aarch64_sve2_sra<mode>): Likewise.
+	(*bitmask_shift_plus<mode>): Match lowered form of lshiftrt.
+
+2025-05-22  Joseph Myers  <josmyers@redhat.com>
+
+	* doc/implement-c.texi: Document C23 implementation-defined
+	behavior.
+	(Constant expressions implementation, Types implementation): New
+	nodes.
+
+2025-05-22  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* dwarf2out.cc (loc_list_from_tree_1) <COMPONENT_REF>: Add specific
+	handling of bit-fields for big-endian targets.
+
+2025-05-22  Alexandre Oliva  <oliva@adacore.com>
+
+	* config/aarch64/aarch64-vxworks.h (TARGET_OS_USES_R18): Define.
+	Update comments.
+	* config/aarch64/aarch64.cc (aarch64_conditional_register_usage):
+	Mark x18 as fixed on VxWorks.
+	(aarch64_override_options_internal): Issue sorry message on
+	-fsanitize=shadow-call-stack if TARGET_OS_USES_R18.
+
+2025-05-22  Shreya Munnangi  <smunnangi1@ventanamicro.com>
+
+	* config/riscv/riscv.cc (synthesize_and): When profitable, use a three
+	shift sequence to clear bits at both upper and lower bits rather than
+	synthesizing the constant mask.
+
+2025-05-22  Siarhei Volkau  <lis8215@gmail.com>
+
+	PR target/70557
+	* config/riscv/riscv.md (movdi_32bit): Add "J" constraint to allow storing 0
+	directly to memory.
+
+2025-05-22  Andrew Pinski  <quic_apinski@quicinc.com>
+
+	PR target/120372
+	* config/aarch64/aarch64.cc (aarch64_rtx_costs <case CONST_INSN>): Handle
+	if outer is COMPARE and the constant can be handled by the cmp instruction.
+
+2025-05-22  Andrew Pinski  <quic_apinski@quicinc.com>
+
+	* expmed.cc (canonicalize_comparison): Use rtx_cost directly
+	instead of gen_move_insn. Print out the choice if dump is enabled.
+
+2025-05-22  Jakub Jelinek  <jakub@redhat.com>
+
+	* gimple-lower-bitint.cc (bitint_extended): New variable.
+	(bitint_large_huge::lower_shift_stmt): For LSHIFT_EXPR with
+	bitint_extended if lhs has most significant partial limb extend
+	it afterwards.
+
+2025-05-22  Xi Ruoyao  <xry111@xry111.site>
+
+	* doc/md.texi: Document the 'q' constraint for LoongArch.
+
+2025-05-22  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/120360
+	* config/i386/predicates.md (x86_64_neg_const_int_operand): New
+	predicate.
+	* config/i386/i386.md (*cmp<mode>_plus_1): New pattern.
+
+2025-05-22  Shreya Munnangi  <smunnangi1@ventanamicro.com>
+
+	* config/riscv/riscv.cc (synthesize_and): When profitable, use two
+	shift combinations to clear high or low bits rather than synthsizing
+	the constant.
+
+2025-05-22  Pengxuan Zheng  <quic_pzheng@quicinc.com>
+
+	* config/aarch64/aarch64.cc (aarch64_evpc_reencode): Copy zero_op0_p and
+	zero_op1_p from d to newd.
+
+2025-05-21  Andrew Pinski  <quic_apinski@quicinc.com>
+
+	PR rtl-optimization/120090
+	* combine.cc (gen_lowpart_for_combine_no_emit): New function.
+	(RTL_HOOKS_GEN_LOWPART_NO_EMIT): Set to gen_lowpart_for_combine_no_emit.
+
+2025-05-21  Jeff Law  <jlaw@ventanamicro.com>
+
+	* config/riscv/riscv.md ((x << C1) + C2): Tighten split condition
+	and generate more efficient code when splitting.
+
+2025-05-21  Jeff Law  <jlaw@ventanamicro.com>
+
+	PR target/120368
+	* config/riscv/riscv.md (shift with masked shift count): Fix
+	opcode when generating an SImode shift on rv64.
+
+2025-05-21  Pan Li  <pan2.li@intel.com>
+
+	* config/riscv/riscv-v.cc (expand_vx_binary_vec_dup_vec): Add new
+	case for rtx code AND.
+	(expand_vx_binary_vec_vec_dup): Ditto.
+	* config/riscv/riscv.cc (riscv_rtx_costs): Ditto.
+	* config/riscv/vector-iterators.md: Add new op and to no_shift_vx_ops.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* gensupport.h (needs_barrier_p): Delete.
+	* gensupport.cc (needs_barrier_p): Likewise.
+	* rtl.h (always_void_p): Return true for PC, RETURN and SIMPLE_RETURN.
+	(expand_opcode): New enum class.
+	(expand_rtx, complete_seq): Declare.
+	* emit-rtl.cc (rtx_expander): New class.
+	(expand_rtx, complete_seq): New functions.
+	* gengenrtl.cc (special_rtx, excluded_rtx): Add a cross-reference
+	comment.
+	* genemit.cc (FIRST_CODE): New constant.
+	(print_code): Delete.
+	(generator::file, generator::used, generator::sequence_type): Delete.
+	(generator::bytes): New member variable.
+	(generator::generator): Update accordingly.
+	(generator::gen_rtx_scratch): Delete.
+	(generator::add_uint, generator::add_opcode, generator::add_code)
+	(generator::add_match_operator, generator::add_exp)
+	(generator::add_vec, generator::gen_table): New member functions.
+	(generator::gen_exp): Rewrite to use a bytecode expansion.
+	(generator::gen_emit_seq): Likewise.
+	(start_gen_insn): Return the C++ expression for the operands array.
+	(gen_insn, gen_expand, gen_split): Update callers accordingly.
+	(emit_c_code): Remove use of _val.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (clobber_pat::code): Delete.
+	(maybe_queue_insn): Don't set clobber_pat::code.
+	(output_add_clobbers): Remove info argument and output the two
+	REG and SCRATCH cases directly.
+	(main): Update call accordingly.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (generator::gen_exp): Report an error for 's' operands.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (generator::gen_exp): Raise an error if we see
+	an 'L' operand.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (generator::used): Update comment.
+	(generator::gen_exp): Remove handling of null unused arrays.
+	(gen_insn, gen_expand): Always pass a used array.
+	(output_add_clobbers): Note why the used array is null here.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (generator): New structure.
+	(gen_rtx_scratch, gen_exp, gen_emit_seq): Turn into member
+	functions of generator.
+	(gen_insn, gen_expand, gen_split, output_add_clobbers): Update
+	users accordingly.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (gen_rtx_scratch, gen_exp): Use operands[%d] rather than
+	operand%d.
+	(start_gen_insn): Mark the incoming arguments as const and store
+	them to an operands array.
+	(gen_expand, gen_split): Remove copies into and out of the operands
+	array.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (start_gen_insn): New function, split out from...
+	(gen_insn, gen_expand): ...here.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (queue): New static variable.
+	(maybe_queue_insn): New function, split out from...
+	(gen_insn): ...here.
+	(queue_expand): New function, split out from...
+	(gen_expand): ...here.
+	(gen_split): New function, split out from...
+	(queue_split): ...here.
+	(main): Queue definitions for later processing rather than
+	emitting them on the fly.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* genemit.cc (gen_exp): Make the info argument a constant reference.
+	(gen_emit_seq, gen_insn, gen_expand, gen_split): Likewise.
+	(output_add_clobbers): Likewise.
+	(main): Update calls accordingly.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* config/sparc/sparc.md (zero_extendhisi2, zero_extendhidi2)
+	(extendhisi2, extendqihi2, extendqisi2, extendqidi2)
+	(extendhidi2): Use operands[0] and operands[1] instead of
+	operand0 and operand1.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* config/stormy16/stormy16.md (negsi2): Remove unused assignment.
+
+2025-05-21  Richard Sandiford  <richard.sandiford@arm.com>
+
+	PR target/100837
+	* config/nds32/nds32-intrinsic.md (unspec_get_pending_int): Use
+	a local variable instead of operands[2].
+
+2025-05-21  Andrew Pinski  <quic_apinski@quicinc.com>
+
+	PR middle-end/120369
+	* tree-complex.cc (gimple_expand_builtin_cabs): Return early
+	if the LHS of cabs is null.
+
+2025-05-21  Co-Authored-By: Jeff Law  <jlaw@ventanamicro.com>
+
+	* config/riscv/riscv-protos.h (synthesize_and): Prototype.
+	* config/riscv/riscv.cc (synthesize_and): New function.
+	* config/riscv/riscv.md (and<mode>3): Use it.
+
+2025-05-21  liuhongt  <hongtao.liu@intel.com>
+
+	PR middle-end/118994
+	* match.pd ((a >> 1) + (b >> 1) + ((a | b) & 1) to
+	.AVG_CEIL (a, b)): New pattern.
+	((a | b) - ((a ^ b) >> 1) to .AVG_CEIL (a, b)): Ditto.
+
 2025-05-20  Andrew Pinski  <quic_apinski@quicinc.com>
 
 	* Makefile.in (gimple-match-exports.o-warn): Remove.

@@ -1757,6 +1757,14 @@ ftms = {
 };
 
 ftms = {
+  name = function_ref;
+  values = {
+    v = 202306;
+    cxxmin = 26;
+  };
+};
+
+ftms = {
   name = out_ptr;
   values = {
     v = 202311;
@@ -1958,6 +1966,15 @@ ftms = {
     v = 202207;
     cxxmin = 20;
     extra_cond = "__cpp_modules";
+  };
+};
+
+ftms = {
+  name = indirect;
+  values = {
+    v = 202502;
+    cxxmin = 26;
+    hosted = yes;
   };
 };
 

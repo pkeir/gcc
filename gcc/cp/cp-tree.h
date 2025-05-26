@@ -6822,6 +6822,7 @@ extern int class_dump_id;
 extern int module_dump_id;
 extern int raw_dump_id;
 extern int coro_dump_id;
+extern int tinst_dump_id;
 
 /* Whether the current context is manifestly constant-evaluated.
    Used by the constexpr machinery to control folding of
@@ -7322,6 +7323,29 @@ extern void cp_check_const_attributes (tree);
 extern void maybe_propagate_warmth_attributes (tree, tree);
 
 /* in error.cc */
+/* A class for pretty-printing to -flang-dump-XXX files.  Used like
+
+   if (cxx_dump_pretty_printer pp {foo_dump_id})
+     {
+       pp_printf (&pp, ...);
+     }
+
+   If the dump is enabled, the pretty printer will open the dump file and
+   attach to it, and flush and close the file on destruction.  */
+
+class cxx_dump_pretty_printer: public pretty_printer
+{
+  int phase;
+  FILE *outf;
+  dump_flags_t flags;
+
+public:
+  cxx_dump_pretty_printer (int phase);
+  operator bool() { return outf != nullptr; }
+  bool has_flag (dump_flags_t f) { return (flags & f); }
+  ~cxx_dump_pretty_printer ();
+};
+
 extern const char *type_as_string		(tree, int);
 extern const char *type_as_string_translate	(tree, int);
 extern const char *decl_as_string		(tree, int);

@@ -3917,6 +3917,7 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 	      case PLUS:
 	      case MINUS:
 	      case AND:
+	      case IOR:
 		{
 		  rtx op_0 = XEXP (x, 0);
 		  rtx op_1 = XEXP (x, 1);
@@ -12321,7 +12322,7 @@ singleton_vxrm_need (void)
   /* Walk the IL noting if VXRM is needed and if there's more than one
      mode needed.  */
   bool found = false;
-  int saved_vxrm_mode;
+  int saved_vxrm_mode = VXRM_MODE_NONE;
   for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
     {
       if (!INSN_P (insn) || DEBUG_INSN_P (insn))
@@ -14523,6 +14524,101 @@ synthesize_and (rtx operands[3])
 	  emit_insn (gen_extend_insn (operands[0], tmp, word_mode, tmode, 1));
 	  return true;
 	}
+    }
+
+  /* The number of instructions to synthesize the constant is a good
+     estimate of the budget.  That does not account for out of order
+     execution an fusion in the constant synthesis those would naturally
+     decrease the budget.  It also does not account for the AND at
+     the end of the sequence which would increase the budget. */
+  int budget = riscv_const_insns (operands[2], true);
+  rtx input = NULL_RTX;
+  rtx output = NULL_RTX;
+
+  /* Left shift + right shift to clear high bits.  */
+  if (budget >= 2 && p2m1_shift_operand (operands[2], word_mode))
+    {
+      int count = (GET_MODE_BITSIZE (GET_MODE (operands[1])).to_constant ()
+		   - exact_log2 (INTVAL (operands[2]) + 1));
+      rtx x = gen_rtx_ASHIFT (word_mode, operands[1], GEN_INT (count));
+      output = gen_reg_rtx (word_mode);
+      emit_insn (gen_rtx_SET (output, x));
+      input = output;
+      x = gen_rtx_LSHIFTRT (word_mode, input, GEN_INT (count));
+      emit_insn (gen_rtx_SET (operands[0], x));
+      return true;
+    }
+
+  /* Clears a bunch of low bits with only high bits set.  */
+  unsigned HOST_WIDE_INT t = ~INTVAL (operands[2]);
+  if (budget >= 2 && exact_log2 (t + 1) >= 0)
+    {
+      int count = ctz_hwi (INTVAL (operands[2]));
+      rtx x = gen_rtx_LSHIFTRT (word_mode, operands[1], GEN_INT (count));
+      output = gen_reg_rtx (word_mode);
+      emit_insn (gen_rtx_SET (output, x));
+      input = output;
+      x = gen_rtx_ASHIFT (word_mode, input, GEN_INT (count));
+      emit_insn (gen_rtx_SET (operands[0], x));
+      return true;
+    }
+
+  /* If we shift right to eliminate the trailing zeros and
+     the result is a SMALL_OPERAND, then it's a shift right,
+     andi and shift left.  */
+  t = INTVAL (operands[2]);
+  t >>= ctz_hwi (t);
+  if (budget >= 3 && SMALL_OPERAND (t) && popcount_hwi (t) > 2)
+    {
+      /* Shift right to clear the low order bits.  */
+      unsigned HOST_WIDE_INT count = ctz_hwi (INTVAL (operands[2]));
+      rtx x = gen_rtx_LSHIFTRT (word_mode, operands[1], GEN_INT (count));
+      output = gen_reg_rtx (word_mode);
+      emit_insn (gen_rtx_SET (output, x));
+      input = output;
+
+      /* Now emit the ANDI.  */
+      unsigned HOST_WIDE_INT mask = INTVAL (operands[2]);
+      mask >>= ctz_hwi (mask);
+      x = gen_rtx_AND (word_mode, input, GEN_INT (mask));
+      output = gen_reg_rtx (word_mode);
+      emit_insn (gen_rtx_SET (output, x));
+      input = output;
+
+      /* Shift left to move bits into position.  */
+      count = INTVAL (operands[2]);
+      count = ctz_hwi (count);
+      x = gen_rtx_ASHIFT (word_mode, input, GEN_INT (count));
+      emit_insn (gen_rtx_SET (operands[0], x));
+      return true;
+    }
+
+  /* If there are all zeros, except for a run of 1s somewhere in the middle
+     of the constant, then this is at worst 3 shifts.  */
+  t = INTVAL (operands[2]);
+  if (budget >= 3
+      && consecutive_bits_operand (GEN_INT (t), word_mode)
+      && popcount_hwi (t) > 3)
+    {
+      /* Shift right to clear the low order bits.  */
+      int count = ctz_hwi (INTVAL (operands[2]));
+      rtx x = gen_rtx_LSHIFTRT (word_mode, operands[1], GEN_INT (count));
+      output = gen_reg_rtx (word_mode);
+      emit_insn (gen_rtx_SET (output, x));
+      input = output;
+
+      /* Shift left to clear the high order bits.  */
+      count += clz_hwi (INTVAL (operands[2])) % BITS_PER_WORD;
+      x = gen_rtx_ASHIFT (word_mode, input, GEN_INT (count));
+      output = gen_reg_rtx (word_mode);
+      emit_insn (gen_rtx_SET (output, x));
+      input = output;
+
+      /* And shift back right to put the bits into position.  */
+      count = clz_hwi (INTVAL (operands[2])) % BITS_PER_WORD;
+      x = gen_rtx_LSHIFTRT (word_mode, input, GEN_INT (count));
+      emit_insn (gen_rtx_SET (operands[0], x));
+      return true;
     }
 
   /* If the remaining budget has gone to less than zero, it
