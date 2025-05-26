@@ -1,7 +1,7 @@
 // { dg-do run { target c++26 } }
 // { dg-require-effective-target hosted }
 
-// 20.3.2.2 Template class shared_ptr [util.smartptr.shared]
+// N5008 20.3.2.2.6 shared_ptr observers [util.smartptr.shared.obs]
 
 #include <memory>
 #include <testsuite_hooks.h>
@@ -15,8 +15,6 @@ struct A
 struct B : A
 {
 };
-
-// 20.3.2.2.6 shared_ptr observers [util.smartptr.weak.obs]
 
 void
 test01()

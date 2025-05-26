@@ -1,7 +1,7 @@
 // { dg-do run { target c++26 } }
 // { dg-require-effective-target hosted }
 
-// 20.3.2.6 Struct owner_equal [util.smartptr.owner.equal]
+// N5008 20.3.2.6 Struct owner_equal [util.smartptr.owner.equal]
 
 #include <memory>
 #include <algorithm>

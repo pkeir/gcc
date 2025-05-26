@@ -1,7 +1,7 @@
 // { dg-do run { target c++26 } }
 // { dg-require-effective-target hosted }
 
-// 20.3.2.5 Struct owner_hash [util.smartptr.owner.hash]
+// N5008 20.3.2.5 Struct owner_hash [util.smartptr.owner.hash]
 
 #include <memory>
 #include <algorithm>

@@ -1,6 +1,8 @@
 // { dg-do compile { target c++26 } }
 // { dg-require-effective-target hosted }
 
+// N5008 20.3.2.5 Struct owner_hash [util.smartptr.owner.hash]
+
 #include <memory>
 
 const std::owner_hash oh;

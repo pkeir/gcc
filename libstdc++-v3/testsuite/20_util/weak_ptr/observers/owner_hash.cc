@@ -1,15 +1,13 @@
 // { dg-do run { target c++26 } }
 // { dg-require-effective-target hosted }
 
-// 20.3.2.3 Template class weak_ptr [util.smartptr.weak]
+// N5008 20.3.2.3.6 weak_ptr observers [util.smartptr.weak.obs]
 
 #include <memory>
 #include <testsuite_hooks.h>
 
 struct A { };
 struct B { };
-
-// 20.3.2.3.6 weak_ptr observers [util.smartptr.weak.obs]
 
 void
 test01()

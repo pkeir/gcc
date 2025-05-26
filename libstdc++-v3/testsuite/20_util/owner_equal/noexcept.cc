@@ -1,6 +1,8 @@
 // { dg-do compile { target c++26 } }
 // { dg-require-effective-target hosted }
 
+// N5008 20.3.2.6 Struct owner_equal [util.smartptr.owner.equal]
+
 #include <memory>
 
 const std::owner_equal eq;
