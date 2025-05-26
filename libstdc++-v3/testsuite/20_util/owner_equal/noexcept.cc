@@ -5,6 +5,12 @@
 
 #include <memory>
 
+#ifndef __cpp_lib_smart_ptr_owner_equality
+# error "Feature-test macro for smart ptr owner equality missing in <memory>"
+#elif __cpp_lib_smart_ptr_owner_equality != 202306L
+# error "Feature-test macro for smart ptr owner equality has wrong value in <memory>"
+#endif
+
 const std::owner_equal eq;
 const std::shared_ptr<int> si;
 const std::weak_ptr<int> wi;
