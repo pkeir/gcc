@@ -2193,4 +2193,14 @@
 #endif /* !defined(__cpp_lib_modules) && defined(__glibcxx_want_modules) */
 #undef __glibcxx_want_modules
 
+#if !defined(__cpp_lib_smart_ptr_owner_equality)
+# if (__cplusplus >  202302L) && _GLIBCXX_HOSTED
+#  define __glibcxx_smart_ptr_owner_equality 202306L
+#  if defined(__glibcxx_want_all) || defined(__glibcxx_want_smart_ptr_owner_equality)
+#   define __cpp_lib_smart_ptr_owner_equality 202306L
+#  endif
+# endif
+#endif /* !defined(__cpp_lib_smart_ptr_owner_equality) && defined(__glibcxx_want_smart_ptr_owner_equality) */
+#undef __glibcxx_want_smart_ptr_owner_equality
+
 #undef __glibcxx_want_all

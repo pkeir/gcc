@@ -1961,6 +1961,15 @@ ftms = {
   };
 };
 
+ftms = {
+  name = smart_ptr_owner_equality;
+  values = {
+    v = 202306;
+    cxxmin = 26;
+    hosted = yes;
+  };
+};
+
 // Standard test specifications.
 stds[97] = ">= 199711L";
 stds[03] = ">= 199711L";
