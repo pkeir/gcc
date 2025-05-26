@@ -12,7 +12,7 @@ struct B { };
 void
 test01()
 {
-  // test empty weak_ptrs compare equivalent
+  // test empty weak_ptr owners compare equivalent
   std::weak_ptr<A> p1;
   std::weak_ptr<B> p2;
   VERIFY( p1.owner_equal(p2) && p2.owner_equal(p1) );
@@ -20,10 +20,10 @@ test01()
   std::shared_ptr<B> p3;
   VERIFY( p1.owner_equal(p3) && p3.owner_equal(p1) );
 
-  static_assert( noexcept(p1.owner_equal(p1)), "" );
-  static_assert( noexcept(p1.owner_equal(p2)), "" );
-  static_assert( noexcept(p1.owner_equal(p3)), "" );
-  static_assert( noexcept(p2.owner_equal(p1)), "" );
+  static_assert( noexcept(p1.owner_equal(p1)) );
+  static_assert( noexcept(p1.owner_equal(p2)) );
+  static_assert( noexcept(p1.owner_equal(p3)) );
+  static_assert( noexcept(p2.owner_equal(p1)) );
 }
 
 

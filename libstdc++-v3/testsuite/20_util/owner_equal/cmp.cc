@@ -14,7 +14,7 @@ struct B { A a[2]; };
 int
 test01()
 {
-  // test empty shared_ptrs compare equivalent
+  // test empty shared_ptr owners compare equivalent
   std::owner_equal eq;
   std::shared_ptr<A> p1;
   std::shared_ptr<A> p2;
