@@ -2223,17 +2223,6 @@
 #endif /* !defined(__cpp_lib_indirect) && defined(__glibcxx_want_indirect) */
 #undef __glibcxx_want_indirect
 
-<<<<<<< HEAD
-#if !defined(__cpp_lib_smart_ptr_owner_equality)
-# if (__cplusplus >  202302L) && _GLIBCXX_HOSTED
-#  define __glibcxx_smart_ptr_owner_equality 202306L
-#  if defined(__glibcxx_want_all) || defined(__glibcxx_want_smart_ptr_owner_equality)
-#   define __cpp_lib_smart_ptr_owner_equality 202306L
-#  endif
-# endif
-#endif /* !defined(__cpp_lib_smart_ptr_owner_equality) && defined(__glibcxx_want_smart_ptr_owner_equality) */
-#undef __glibcxx_want_smart_ptr_owner_equality
-=======
 #if !defined(__cpp_lib_polymorphic)
 # if (__cplusplus >  202302L) && _GLIBCXX_HOSTED
 #  define __glibcxx_polymorphic 202502L
@@ -2243,6 +2232,15 @@
 # endif
 #endif /* !defined(__cpp_lib_polymorphic) && defined(__glibcxx_want_polymorphic) */
 #undef __glibcxx_want_polymorphic
->>>>>>> master
+
+#if !defined(__cpp_lib_smart_ptr_owner_equality)
+# if (__cplusplus >  202302L) && _GLIBCXX_HOSTED
+#  define __glibcxx_smart_ptr_owner_equality 202306L
+#  if defined(__glibcxx_want_all) || defined(__glibcxx_want_smart_ptr_owner_equality)
+#   define __cpp_lib_smart_ptr_owner_equality 202306L
+#  endif
+# endif
+#endif /* !defined(__cpp_lib_smart_ptr_owner_equality) && defined(__glibcxx_want_smart_ptr_owner_equality) */
+#undef __glibcxx_want_smart_ptr_owner_equality
 
 #undef __glibcxx_want_all
