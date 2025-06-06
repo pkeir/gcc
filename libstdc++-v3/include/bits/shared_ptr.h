@@ -909,7 +909,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     : public _Sp_owner_less<weak_ptr<_Tp>, shared_ptr<_Tp>>
     { };
 
-#if __cplusplus > 202302L
+#ifdef __glibcxx_smart_ptr_owner_equality // >= C++26
 
   /**
    * @brief Provides ownership-based hashing.
