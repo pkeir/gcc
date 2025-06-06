@@ -462,6 +462,7 @@ extern cxx_binding *outer_binding (tree, cxx_binding *, bool);
 extern void cp_emit_debug_info_for_using (tree, tree);
 
 extern void finish_nonmember_using_decl (tree scope, tree name);
+extern void add_using_namespace (tree, tree);
 extern void finish_using_directive (tree target, tree attribs);
 void push_local_extern_decl_alias (tree decl);
 extern tree pushdecl (tree, bool hiding = false);
@@ -500,6 +501,10 @@ enum WMB_Flags
   WMB_Hidden = 1 << 3,
   WMB_Purview = 1 << 4,
 };
+inline WMB_Flags operator|(WMB_Flags x, WMB_Flags y)
+{ return WMB_Flags(+x|y); }
+inline WMB_Flags& operator|=(WMB_Flags& x, WMB_Flags y)
+{ return x = x|y; }
 
 extern unsigned walk_module_binding (tree binding, bitmap partitions,
 				     bool (*)(tree decl, WMB_Flags, void *data),

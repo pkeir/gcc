@@ -182,9 +182,10 @@ class cxx_format_postprocessor : public format_postprocessor
   : m_type_a (), m_type_b ()
   {}
 
-  format_postprocessor *clone() const final override
+  std::unique_ptr<format_postprocessor>
+  clone() const final override
   {
-    return new cxx_format_postprocessor ();
+    return std::make_unique<cxx_format_postprocessor> ();
   }
 
   void handle (pretty_printer *pp) final override;
@@ -204,8 +205,7 @@ cxx_dump_pretty_printer (int phase)
   if (outf)
     {
       pp_format_decoder (this) = cp_printer;
-      /* This gets deleted in ~pretty_printer.  */
-      pp_format_postprocessor (this) = new cxx_format_postprocessor ();
+      set_format_postprocessor (std::make_unique<cxx_format_postprocessor> ());
       set_output_stream (outf);
     }
 }
@@ -301,7 +301,7 @@ void
 cxx_initialize_diagnostics (diagnostic_context *context)
 {
   cxx_pretty_printer *pp = new cxx_pretty_printer ();
-  pp_format_postprocessor (pp) = new cxx_format_postprocessor ();
+  pp->set_format_postprocessor (std::make_unique<cxx_format_postprocessor> ());
   context->set_pretty_printer (std::unique_ptr<pretty_printer> (pp));
 
   c_common_diagnostics_set_defaults (context);
@@ -1282,11 +1282,36 @@ dump_global_iord (cxx_pretty_printer *pp, tree t)
   pp_printf (pp, p, DECL_SOURCE_FILE (t));
 }
 
+/* Write a representation of OpenMP "declare mapper" T to PP in a manner
+   suitable for error messages.  */
+
+static void
+dump_omp_declare_mapper (cxx_pretty_printer *pp, tree t, int flags)
+{
+  pp_string (pp, "#pragma omp declare mapper");
+  if (t == NULL_TREE || t == error_mark_node)
+    return;
+  pp_space (pp);
+  pp_cxx_left_paren (pp);
+  if (OMP_DECLARE_MAPPER_ID (t))
+    {
+      pp_cxx_tree_identifier (pp, OMP_DECLARE_MAPPER_ID (t));
+      pp_colon (pp);
+    }
+  dump_type (pp, TREE_TYPE (t), flags);
+  pp_cxx_right_paren (pp);
+}
+
 static void
 dump_simple_decl (cxx_pretty_printer *pp, tree t, tree type, int flags)
 {
   if (VAR_P (t) && DECL_NTTP_OBJECT_P (t))
     return dump_expr (pp, DECL_INITIAL (t), flags);
+
+  if (TREE_CODE (t) == VAR_DECL
+      && DECL_LANG_SPECIFIC (t)
+      && DECL_OMP_DECLARE_MAPPER_P (t))
+    return dump_omp_declare_mapper (pp, DECL_INITIAL (t), flags);
 
   if (flags & TFF_DECL_SPECIFIERS)
     {
@@ -3243,6 +3268,27 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
 	pp_cxx_right_brace (pp);
 	break;
       }
+
+    case CO_AWAIT_EXPR:
+      pp_cxx_ws_string (pp, "co_await");
+      pp_cxx_whitespace (pp);
+      dump_expr (pp, TREE_OPERAND (t, 0), flags);
+      break;
+
+    case CO_YIELD_EXPR:
+      pp_cxx_ws_string (pp, "co_yield");
+      pp_cxx_whitespace (pp);
+      dump_expr (pp, TREE_OPERAND (t, 0), flags);
+      break;
+
+    case CO_RETURN_EXPR:
+      pp_cxx_ws_string (pp, "co_return");
+      if (TREE_OPERAND (t, 0))
+	{
+	  pp_cxx_whitespace (pp);
+	  dump_expr (pp, TREE_OPERAND (t, 0), flags);
+	}
+      break;
 
       /*  This list is incomplete, but should suffice for now.
 	  It is very important that `sorry' does not call

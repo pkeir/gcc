@@ -3891,6 +3891,25 @@ riscv_extend_cost (rtx op, bool unsigned_p)
   return COSTS_N_INSNS (2);
 }
 
+/* Return the cost of the vector binary rtx like add, minus, mult.
+   The cost of scalar2vr_cost will be appended if there one of the
+   op comes from the VEC_DUPLICATE.  */
+
+static int
+get_vector_binary_rtx_cost (rtx x, int scalar2vr_cost)
+{
+  gcc_assert (riscv_v_ext_mode_p (GET_MODE (x)));
+
+  rtx op_0 = XEXP (x, 0);
+  rtx op_1 = XEXP (x, 1);
+
+  if (GET_CODE (op_0) == VEC_DUPLICATE
+      || GET_CODE (op_1) == VEC_DUPLICATE)
+    return (scalar2vr_cost + 1) * COSTS_N_INSNS (1);
+  else
+    return COSTS_N_INSNS (1);
+}
+
 /* Implement TARGET_RTX_COSTS.  */
 
 #define SINGLE_SHIFT_COST 1
@@ -3904,6 +3923,9 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
   if (riscv_v_ext_mode_p (mode))
     {
       int gr2vr_cost = get_gr2vr_cost ();
+      int fr2vr_cost = get_fr2vr_cost ();
+      int scalar2vr_cost = FLOAT_MODE_P (GET_MODE_INNER (mode))
+	? fr2vr_cost : gr2vr_cost;
 
       switch (outer_code)
 	{
@@ -3914,19 +3936,38 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 	      case VEC_DUPLICATE:
 		*total = gr2vr_cost * COSTS_N_INSNS (1);
 		break;
+	      case IF_THEN_ELSE:
+		{
+		  rtx op = XEXP (x, 1);
+
+		  switch (GET_CODE (op))
+		    {
+		    case DIV:
+		    case UDIV:
+		      *total = get_vector_binary_rtx_cost (op, scalar2vr_cost);
+		      break;
+		    default:
+		      *total = COSTS_N_INSNS (1);
+		      break;
+		    }
+		}
+		break;
 	      case PLUS:
 	      case MINUS:
 	      case AND:
 	      case IOR:
+	      case XOR:
+	      case MULT:
 		{
+		  rtx op;
 		  rtx op_0 = XEXP (x, 0);
 		  rtx op_1 = XEXP (x, 1);
 
-		  if (GET_CODE (op_0) == VEC_DUPLICATE
-		      || GET_CODE (op_1) == VEC_DUPLICATE)
-		    *total = (gr2vr_cost + 1) * COSTS_N_INSNS (1);
+		  if (GET_CODE (op = op_0) == MULT
+		      || GET_CODE (op = op_1) == MULT)
+		    *total = get_vector_binary_rtx_cost (op, scalar2vr_cost);
 		  else
-		    *total = COSTS_N_INSNS (1);
+		    *total = get_vector_binary_rtx_cost (x, scalar2vr_cost);
 		}
 		break;
 	      default:
@@ -5352,6 +5393,40 @@ riscv_expand_conditional_move (rtx dest, rtx op, rtx cons, rtx alt)
   rtx_code code = GET_CODE (op);
   rtx op0 = XEXP (op, 0);
   rtx op1 = XEXP (op, 1);
+
+  /* For some tests, we can easily construct a 0, -1 value
+     which can then be used to synthesize more efficient
+     sequences that don't use zicond.  */
+  if ((code == LT || code == GE)
+      && (REG_P (op0) || SUBREG_P (op0))
+      && op1 == CONST0_RTX (GET_MODE (op0)))
+    {
+      /* The code to expand signed division by a power of 2 uses a
+	 conditional add by 2^n-1 idiom.  It can be more efficiently
+	 synthesized without zicond using srai+srli+add.
+
+	 But we don't see the constants here.  Just a conditional move
+	 with registers as the true/false values.  So this is a little
+	 over-aggressive and can result in a few missed if-conversions.  */
+      if ((REG_P (cons) || SUBREG_P (cons))
+	  && (REG_P (alt) || SUBREG_P (alt)))
+	return false;
+
+      /* If one value is a nonzero constant and the other value is
+	 not a constant, then avoid zicond as more efficient sequences
+	 using the splatted sign bit are often possible.  */
+      if (CONST_INT_P (alt)
+	  && alt != CONST0_RTX (mode)
+	  && !CONST_INT_P (cons))
+	return false;
+
+      if (CONST_INT_P (cons)
+	  && cons != CONST0_RTX (mode)
+	  && !CONST_INT_P (alt))
+	return false;
+
+      /* If we need more special cases, add them here.  */
+    }
 
   if (((TARGET_ZICOND_LIKE
 	|| (arith_operand (cons, mode) && arith_operand (alt, mode)))
@@ -9779,7 +9854,7 @@ riscv_register_move_cost (machine_mode mode,
       if (from_is_gpr)
 	return get_gr2vr_cost ();
       else if (from_is_fpr)
-	return get_vector_costs ()->regmove->FR2VR;
+	return get_fr2vr_cost ();
     }
 
   return riscv_secondary_memory_needed (mode, from, to) ? 8 : 2;
@@ -12645,6 +12720,21 @@ get_gr2vr_cost ()
   return cost;
 }
 
+/* Return the cost of moving data from floating-point to vector register.
+   It will take the value of --param=fpr2vr-cost if it is provided.
+   Otherwise the default regmove->FR2VR will be returned.  */
+
+int
+get_fr2vr_cost ()
+{
+  int cost = get_vector_costs ()->regmove->FR2VR;
+
+  if (fpr2vr_cost != FPR2VR_COST_UNPROVIDED)
+    cost = fpr2vr_cost;
+
+  return cost;
+}
+
 /* Implement targetm.vectorize.builtin_vectorization_cost.  */
 
 static int
@@ -12710,8 +12800,7 @@ riscv_builtin_vectorization_cost (enum vect_cost_for_stmt type_of_cost,
     case vec_construct:
 	{
 	  /* TODO: This is too pessimistic in case we can splat.  */
-	  int regmove_cost = fp ? costs->regmove->FR2VR
-	    : get_gr2vr_cost ();
+	  int regmove_cost = fp ? get_fr2vr_cost () : get_gr2vr_cost ();
 	  return (regmove_cost + common_costs->scalar_to_vec_cost)
 	    * estimated_poly_value (TYPE_VECTOR_SUBPARTS (vectype));
 	}
@@ -14621,19 +14710,70 @@ synthesize_and (rtx operands[3])
       return true;
     }
 
+  /* The special cases didn't apply.  It's entirely possible we may
+     want to combine some of the ideas above with bclr, but for now
+     those are deferred until we see them popping up in practice.  */
+
+  unsigned HOST_WIDE_INT ival = ~INTVAL (operands[2]);
+
+  /* Clear as many bits using andi as we can.  */
+  if ((ival & HOST_WIDE_INT_UC (0x7ff)) != 0x0)
+    {
+      ival &= ~HOST_WIDE_INT_UC (0x7ff);
+      budget--;
+    }
+
+  /* And handle remaining bits via bclr.  */
+  while (TARGET_ZBS && ival)
+    {
+      unsigned HOST_WIDE_INT tmpval = HOST_WIDE_INT_UC (1) << ctz_hwi (ival);
+      ival &= ~tmpval;
+      budget--;
+    }
+
   /* If the remaining budget has gone to less than zero, it
      forces the value into a register and performs the AND
      operation.  It returns TRUE to the caller so the caller
      knows code generation is complete.
      FIXME: This is hacked to always be enabled until the last
      patch in the series is enabled.  */
-  if (1)
+  if (ival || budget < 0)
     {
       rtx x = force_reg (word_mode, operands[2]);
       x = gen_rtx_AND (word_mode, operands[1], x);
       emit_insn (gen_rtx_SET (operands[0], x));
       return true;
     }
+
+  /* Synthesis is better than loading the constant.  */
+  ival = ~INTVAL (operands[2]);
+  input = operands[1];
+
+  /* Clear any of the lower 11 bits we need.  */
+  if ((ival & HOST_WIDE_INT_UC (0x7ff)) != 0)
+    {
+      rtx x = GEN_INT (~(ival & HOST_WIDE_INT_UC (0x7ff)));
+      x = gen_rtx_AND (word_mode, input, x);
+      output = gen_reg_rtx (word_mode);
+      emit_insn (gen_rtx_SET (output, x));
+      input = output;
+      ival &= ~HOST_WIDE_INT_UC (0x7ff);
+    }
+
+  /* Clear the rest with bclr.  */
+  while (ival)
+    {
+      unsigned HOST_WIDE_INT tmpval = HOST_WIDE_INT_UC (1) << ctz_hwi (ival);
+      rtx x = GEN_INT (~tmpval);
+      x = gen_rtx_AND (word_mode, input, x);
+      output = gen_reg_rtx (word_mode);
+      emit_insn (gen_rtx_SET (output, x));
+      input = output;
+      ival &= ~tmpval;
+    }
+
+  emit_move_insn (operands[0], input);
+  return true;
 }
 
 

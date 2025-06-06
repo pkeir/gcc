@@ -1,3 +1,720 @@
+2025-06-05  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/120548
+	* include/std/format (__formatter_fp::_M_localize): Do not
+	include a leading sign character in the string to be grouped.
+	* testsuite/std/format/functions/format.cc: Check grouping when
+	sign is present in the output.
+
+2025-06-05  Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	PR libstdc++/119152
+	* src/c++23/std.cc.in (std::indirect, pmr::indirect)
+	[__cpp_lib_indirect]
+	(std::polymorphic, pmr::polymorphic) [__cpp_lib_polymorphic]: Export.
+
+2025-06-05  Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	PR libstdc++/120481
+	* include/bits/chrono_io.h (__format::_S_chars): Reorder so it
+	contains "-{}".
+	(__format::_S_colon, __format::_S_slash, __format::_S_space)
+	(__format::_S_plus_minus): Updated starting indicies.
+	(__format::_S_minus_empty_spec): Define.
+	(__formatter_chrono::_M_C_y_Y, __formatter_chrono::_M_R_T):
+	Rework implementation.
+	(__formatter_chrono::_M_d_e, __formatter_chrono::_M_F)
+	(__formatter_chrono::_M_m, __formatter_chrono::_M_u_w)
+	(__formatter_chrono::_M_H_I, __formatter_chrono::_M_p):
+	Handle multi digits values.
+	(__formatter_chrono::_S_digit): Return string view.
+	(__formatter_chrono::_S_str_d1, __formatter_chrono::_S_str_d2)
+	(__formatter_chrono::_S_fill_two_digits): Define.
+	* testsuite/std/time/format/empty_spec.cc: Update test for
+	year_month_day, that uses '%F'.
+	* testsuite/std/time/format/pr120481.cc: New test.
+
+2025-06-05  Nathan Myers  <ncm@cantrip.org>
+
+	Revert:
+	2025-06-04  Nathan Myers  <ncm@cantrip.org>
+
+	PR libstdc++/119741
+	* include/std/sstream: full implementation, really just
+	decls, requires clause and plumbing.
+	* include/bits/version.def, include/bits/version.h:
+	new preprocessor symbol
+	__cpp_lib_sstream_from_string_view.
+	* testsuite/27_io/basic_stringbuf/cons/char/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_istringstream/cons/char/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_ostringstream/cons/char/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_stringstream/cons/char/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_stringbuf/cons/wchar_t/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_istringstream/cons/wchar_t/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_ostringstream/cons/wchar_t/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_stringstream/cons/wchar_t/string_view.cc:
+	New tests.
+
+2025-06-04  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/std/time/format/empty_spec.cc: Only test time zones
+	for cxx11 string ABI.
+
+2025-06-04  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/99832
+	* include/bits/chrono.h (system_clock::to_time_t): Add
+	always_inline attribute to be agnostic to the underlying type of
+	time_t.
+	(system_clock::from_time_t): Add always_inline for consistency
+	with to_time_t.
+	* testsuite/20_util/system_clock/99832.cc: New test.
+
+2025-06-04  Nathan Myers  <ncm@cantrip.org>
+
+	PR libstdc++/119741
+	* include/std/sstream: full implementation, really just
+	decls, requires clause and plumbing.
+	* include/bits/version.def, include/bits/version.h:
+	new preprocessor symbol
+	__cpp_lib_sstream_from_string_view.
+	* testsuite/27_io/basic_stringbuf/cons/char/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_istringstream/cons/char/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_ostringstream/cons/char/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_stringstream/cons/char/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_stringbuf/cons/wchar_t/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_istringstream/cons/wchar_t/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_ostringstream/cons/wchar_t/string_view.cc:
+	New tests.
+	* testsuite/27_io/basic_stringstream/cons/wchar_t/string_view.cc:
+	New tests.
+
+2025-06-04  Patrick Palka  <ppalka@redhat.com>
+
+	* include/bits/c++config (_GLIBCXX_AUTO_CAST): Define.
+	* include/bits/iterator_concepts.h (_Decay_copy, __decay_copy):
+	Remove.
+	(__member_begin, __adl_begin): Use _GLIBCXX_AUTO_CAST instead of
+	__decay_copy as per P0849R8.
+	* include/bits/ranges_base.h (_Begin): Likewise.
+	(__member_end, __adl_end, _End): Likewise.
+	(__member_rbegin, __adl_rbegin, _RBegin): Likewise.
+	(__member_rend, __adl_rend, _Rend): Likewise.
+	(__member_size, __adl_size, _Size): Likewise.
+	(_Data): Likewise.
+
+2025-06-04  Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	* testsuite/std/time/format/empty_spec.cc: New tests.
+
+2025-06-04  Patrick Palka  <ppalka@redhat.com>
+
+	* include/bits/ranges_algo.h (__starts_with_fn, starts_with):
+	Define.
+	(__ends_with_fn, ends_with): Define.
+	* include/bits/version.def (ranges_starts_ends_with): Define.
+	* include/bits/version.h: Regenerate.
+	* include/std/algorithm: Provide __cpp_lib_ranges_starts_ends_with.
+	* src/c++23/std.cc.in (ranges::starts_with): Export.
+	(ranges::ends_with): Export.
+	* testsuite/25_algorithms/ends_with/1.cc: New test.
+	* testsuite/25_algorithms/starts_with/1.cc: New test.
+
+2025-06-04  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/semaphore_base.h (_S_get_current): Replace with
+	non-static _M_get_current.
+	(_S_do_try_acquire): Replace with non-static _M_do_try_acquire.
+
+2025-06-04  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/104928
+	* include/bits/semaphore_base.h (_S_do_try_acquire): Take old
+	value by reference.
+	(_M_acquire): Move _S_do_try_acquire call out of the predicate
+	and loop on its result. Make the predicate capture and update
+	the local copy of the value.
+	(_M_try_acquire_until, _M_try_acquire_for): Likewise.
+	(_M_try_acquire): Just call _M_try_acquire_for.
+	* testsuite/30_threads/semaphore/104928-2.cc: New test.
+	* testsuite/30_threads/semaphore/104928.cc: New test.
+
+2025-06-04  Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	* include/bits/chrono_io.h (__formatter_chrono:_M_s): Add missing
+	__out argument to format_to call.
+	* testsuite/std/time/format/empty_spec.cc: New test.
+
+2025-06-03  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/std/stop_token: Check __glibcxx_jthread instead of
+	__cplusplus.
+
+2025-06-03  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/std/type_traits (is_destructible, is_destructible_v):
+	Define using new built-in.
+	(is_nothrow_destructible, is_nothrow_destructible_v): Likewise.
+	(is_trivially_destructible, is_trivially_destructible_v):
+	Likewise.
+
+2025-06-03  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_timed_wait.h (__detail::__wait_until):
+	Remove incorrect comment.
+	(__atomic_wait_address_until_v): Do not take address of __args in
+	call to __detail::__wait_until. Fix return statement to refer to
+	member of __wait_result_type.
+	(__atomic_wait_address_for_v): Change parameter type from
+	time_point to duration.
+	* src/c++20/atomic.cc (__spin_until_impl): Fix incorrect
+	return value. Reuse result of first call to clock.
+
+2025-06-03  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/stl_vector.h (~_Vector_base): Add unreachable
+	hint for negative capacity and cast to size_t explicitly.
+	* include/bits/vector.tcc (vector::_M_realloc_append): Use
+	size() instead of end() - begin().
+
+2025-06-03  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/std/bit (__rotl, __rotr): Use static_cast for
+	conversion from int to unsigned.
+
+2025-06-03  Jonathan Wakely  <jwakely@redhat.com>
+
+	* src/c++23/std.cc.in: Remove redundant checks for feature test
+	macros that are always true.
+
+2025-06-02  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/basic_string.h (basic_string::size): Remove space
+	before parameter list.
+	(basic_string::capacity): Likewise.
+	* include/bits/stl_deque.h (deque::size): Likewise.
+	* include/bits/stl_vector.h (vector::size, vector::capacity):
+	Likewise.
+	* include/bits/vector.tcc (vector::_M_realloc_insert): Likewise.
+	(vector::_M_realloc_append): Likewise.
+
+2025-06-02  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/120386
+	* include/bits/ranges_algo.h (__unique_copy_fn): Reorder
+	arguments for third case to match the first two cases.
+	* include/bits/stl_algo.h (__unique_copy): Replace three
+	overloads with two, depending only on the iterator category of
+	the input range.  Dispatch to __unique_copy_1 for the
+	non-forward case.
+	(__unique_copy_1): New overloads for the case where the input
+	range uses non-forward iterators.
+	(unique_copy): Only pass the input range category to
+	__unique_copy.
+	* testsuite/25_algorithms/unique_copy/lwg2439.cc: New test.
+
+2025-06-02  Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	* include/bits/funcwrap.h (__polyfunc::__pass_by_rref): Define.
+	(__polyfunc::__param_t): Update to use __pass_by_rref.
+	* include/bits/cpyfunc_impl.h:: Assert that are parameters type
+	are complete.
+	* include/bits/funcref_impl.h: Likewise.
+	* include/bits/mofunc_impl.h: Likewise.
+	* testsuite/20_util/copyable_function/call.cc: New test.
+	* testsuite/20_util/function_ref/call.cc: New test.
+	* testsuite/20_util/move_only_function/call.cc: New test.
+	* testsuite/20_util/copyable_function/conv.cc: New test.
+	* testsuite/20_util/function_ref/conv.cc: New test.
+	* testsuite/20_util/move_only_function/conv.cc: New test.
+	* testsuite/20_util/copyable_function/incomplete_neg.cc: New test.
+	* testsuite/20_util/function_ref/incomplete_neg.cc: New test.
+	* testsuite/20_util/move_only_function/incomplete_neg.cc: New test.
+
+2025-06-02  Jonathan Wakely  <jwakely@redhat.com>
+	    Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	PR libstdc++/119152
+	* include/bits/indirect.h (std::polymorphic, pmr::polymorphic)
+	[__glibcxx_polymorphic]: Define.
+	* include/bits/version.def (polymorphic): Define.
+	* include/bits/version.h: Regenerate.
+	* include/std/memory: Define __cpp_lib_polymorphic.
+	* testsuite/std/memory/polymorphic/copy.cc: New test.
+	* testsuite/std/memory/polymorphic/copy_alloc.cc: New test.
+	* testsuite/std/memory/polymorphic/ctor.cc: New test.
+	* testsuite/std/memory/polymorphic/ctor_poly.cc: New test.
+	* testsuite/std/memory/polymorphic/incomplete.cc: New test.
+	* testsuite/std/memory/polymorphic/invalid_neg.cc: New test.
+	* testsuite/std/memory/polymorphic/move.cc: New test.
+	* testsuite/std/memory/polymorphic/move_alloc.cc: New test.
+
+2025-05-30  Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	* testsuite/std/time/format/empty_spec.cc: New test.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_timed_wait.h: Use __wait_result_type.
+	* include/bits/atomic_wait.h (__wait_result_type): New struct.
+	(__wait_args::_M_prep_for_wait_on): Rename to _M_setup_wait, use
+	__wait_result_type.
+	(__atomic_wait_address): Adjust to call _M_setup_wait.
+	* src/c++20/atomic.cc (__spin_impl): Use __wait_result_type.
+	(__wait_impl): Likewise.
+	(__spin_until_impl): Likewise.
+	(__wait_until_impl): Likewise.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/118494
+	PR libstdc++/110854
+	PR libstdc++/98749
+	* acinclude.m4 (GLIBCXX_CHECK_GTHREADS): Remove checks for
+	sem_timedwait. Do not define _GLIBCXX_HAVE_POSIX_SEMAPHORE.
+	* config.h.in: Regenerate.
+	* configure: Regenerate.
+	* include/bits/semaphore_base.h (__platform_semaphore): Remove.
+	(__atomic_semaphore): Replace with __semaphore_base<bool> and
+	make type of _M_count depend on template parameter. Fix _S_max
+	constant to use correct type.
+	(__semaphore_base::_M_try_acquire): Qualify to avoid ADL.
+	(__semaphore_base::_M_release): Return old value. Remove FIXME
+	comment.
+	(__semaphore_impl): Replace typedef with alias template.
+	* include/bits/version.def (semaphore): Do not depend on
+	_GLIBCXX_HAVE_POSIX_SEMAPHORE.
+	* include/bits/version.h: Regenerate.
+	* include/std/semaphore (semaphore): Adjust type of _M_sem
+	member. Add constexpr to constructor. Add assertions to
+	(semaphore::semaphore(ptrdiff_t)): Add constexpr. Add assertion
+	for precondition.
+	(semaphore::release): Add assertion using value returned from
+	_M_release.
+	* testsuite/30_threads/semaphore/100806.cc: Increase template
+	argument for std::counting_semaphore, so constructor
+	precondition is met.
+	* testsuite/30_threads/semaphore/cons.cc: New test.
+	* testsuite/30_threads/semaphore/try_acquire_posix.cc: Remove.
+	* testsuite/30_threads/semaphore/platform_try_acquire_for.cc:
+	Removed.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/std/barrier (__tree_barrier_base): New class.
+	(__tree_barrier): Move non-dependent code into
+	__tree_barrier_base and derive from it.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/118395
+	PR libstdc++/108974
+	PR libstdc++/98749
+	* include/std/barrier (__tree_barrier): Use default
+	member-initializers. Change _M_state member from
+	unique_ptr<__state_t[]> to atomic<__state_t*>. Add
+	no_unique_address attribute to _M_completion.
+	(__tree_barrier::_M_arrive): Load value from _M_state.
+	(__tree_barrier::_M_invoke_completion): New member function to
+	ensure a throwing completion function will terminate, as
+	proposed in LWG 3898.
+	(__tree_barrier::max): Reduce by one to avoid overflow.
+	(__tree_barrier::__tree_barrier): Add constexpr. Qualify call to
+	std::move. Remove mem-initializers made unnecessary by default
+	member-initializers. Add precondition check. Only allocate state
+	array if not constant evaluated.
+	(__tree_barrier::arrive): Add precondition check. Do deferred
+	initialization of _M_state if needed.
+	(barrier): Add static_assert, as proposed in LWG 3898.
+	(barrier::barrier): Add constexpr.
+	* testsuite/30_threads/barrier/cons.cc: New test.
+	* testsuite/30_threads/barrier/lwg3898.cc: New test.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/std/latch (latch::arrive_and_wait): Optimise.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* config/abi/pre/gnu.ver: Add new symbol version and exports.
+	* include/bits/atomic_timed_wait.h (__platform_wait_until): Move
+	to atomic.cc.
+	(__cond_wait_until, __spin_until_impl): Likewise.
+	(__wait_until_impl): Likewise. Change __wait_args_base parameter
+	to non-const reference and change third parameter to
+	__wait_clock_t::duration.
+	(__wait_until): Change __wait_args_base parameter to non-const
+	reference. Change Call time_since_epoch() to get duration from
+	time_point.
+	(__wait_for): Change __wait_args_base parameter to non-const
+	reference.
+	(__atomic_wait_address_until): Call _M_prep_for_wait_on on args.
+	(__atomic_wait_address_for): Likewise.
+	(__atomic_wait_address_until_v): Qualify call to avoid ADL. Do
+	not forward __vfn.
+	* include/bits/atomic_wait.h (__platform_wait_uses_type): Use
+	alignof(T) not alignof(T*).
+	(__futex_wait_flags, __platform_wait, __platform_notify)
+	(__waitable_state, __spin_impl, __notify_impl): Move to
+	atomic.cc.
+	(__wait_impl): Likewise. Change __wait_args_base parameter to
+	non-const reference.
+	(__wait_args_base::_M_wait_state): New data member.
+	(__wait_args_base::_M_prep_for_wait_on): New member function.
+	(__wait_args_base::_M_load_proxy_wait_val): New member
+	function.
+	(__wait_args_base::_S_memory_order_for): Remove member function.
+	(__atomic_wait_address): Call _M_prep_for_wait_on on args.
+	(__atomic_wait_address_v): Qualify call to avoid ADL.
+	* src/c++20/Makefile.am: Add new file.
+	* src/c++20/Makefile.in: Regenerate.
+	* src/c++20/atomic.cc: New file.
+	* testsuite/17_intro/headers/c++1998/49745.cc: Remove XFAIL for
+	C++20 and later.
+	* testsuite/29_atomics/atomic/wait_notify/100334.cc: Remove use
+	of internal implementation details.
+	* testsuite/util/testsuite_abi.cc: Add GLIBCXX_3.4.35 version.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_timed_wait.h (__wait_until_impl): Adjust
+	to use new naming.
+	* include/bits/atomic_wait.h (__waiter_pool_impl): Rename to
+	__waitable_state.
+	(__waiter_pool_impl::_S_wait): Rename to _M_waiters.
+	(__waiter_pool_impl::_S_impl_for): Rename to _S_state_for.
+	(__waiter_pool_impl::_S_track): Adjust to use new naming.
+	(__wait_impl, __notify_impl): Likewise.
+	* testsuite/29_atomics/atomic/wait_notify/100334.cc: Adjust to
+	use new naming.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_timed_wait.h
+	(__atomic_wait_address_until_v): Replace __atomic_compare with
+	__atomic_eq.
+	(__atomic_wait_address_for_v): Likewise.
+	* include/bits/atomic_wait.h (__atomic_compare): Rename to
+	__atomic_eq.
+	(__atomic_wait_address_v): Replace __atomic_compare with
+	__atomic_eq.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_timed_wait.h (__wait_until_impl): Change
+	first parameter to const void* and then static_cast to const
+	__platform_wait_t* when not using proxied wait.
+	(__wait_until): Change first parameter to const void*.
+	(__wait_for): Likewise.
+	(__atomic_wait_address_until): Remove reinterpret_cast and allow
+	address to implicitly convert to const void* instead.
+	(__atomic_wait_address_for): Likewise.
+	* include/bits/atomic_wait.h: (__wait_impl, __notify_impl):
+	Change first parameter to const void* and then static_cast to
+	const __platform_wait_t* when not using proxied wait.
+	(__atomic_wait_address, __atomic_notify_address) Remove
+	reinterpret_cast and allow address to implicitly convert to
+	const void* instead.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_wait.h (__platform_wait): Change function
+	template to a normal function. The parameter is always
+	__platform_wait_t* which is just int* for this implementation of
+	the function.
+	(__platform_notify): Likewise.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_timed_wait.h (__to_wait_clock): Do not use
+	chrono::ceil if clock and duration are already correct type.
+	(__wait_until): Always call __to_wait_clock.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_wait.h (__notify_impl): Increment the
+	proxy value before returning early for the uncontended case.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_timed_wait.h (__cond_wait_impl): Add
+	missing inline keyword.
+	(__spin_until_impl): Change parameter from pointer to reference.
+	Replace make_pair with list-initialization.  Initialize variable
+	for return value.
+	(__wait_until_impl): Likewise. Remove some preprocessor
+	conditional logic. Use _S_track for contention tracking.
+	Avoid unnecessary const_cast.
+	(__wait_until): Change parameter from pointer to reference.
+	Replace make_pair with list-initialization.
+	(__wait_for):  Change parameter from pointer to reference. Add
+	__do_spin flag to args.
+	* include/bits/atomic_wait.h (__waiter_pool_impl::_S_track): New
+	function returning an RAII object for contention tracking.
+	(__wait_flags): Do not set the __do_spin flag in the __spin_only
+	enumerator. Comment out the unused __abi_version_mask
+	enumerator.  Define operator| and operator|= overloads.
+	(__wait_args_base::operator&): Define.
+	(__wait_args::operator&, __wait_args::_S_default_flags): Remove.
+	(__wait_args::operator|, __wait_args::operator|=): Remove.
+	(__spin_impl): Change parameter from pointer to reference.
+	Replace make_pair call with list-initialization.
+	(__wait_impl): Likewise.  Remove some preprocessor conditional
+	logic.  Always store old value in __args._M_old. Avoid
+	unnecessary const_cast. Use _S_track.
+	(__notify_impl): Change parameter to reference. Remove some
+	preprocessor conditional logic.
+	(__atomic_wait_address): Add comment. Update __args._M_old on
+	each iteration.
+	(__atomic_wait_address_v): Add comment.
+	* include/std/latch (latch::wait): Adjust predicates for new
+	logic.
+	* testsuite/29_atomics/atomic_integral/wait_notify.cc: Improve
+	test.
+
+2025-05-30  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/atomic_timed_wait.h: Whitespace fixes.
+	* include/bits/atomic_wait.h: Likewise.
+
+2025-05-30  Thomas Rodgers  <trodgers@redhat.com>
+
+	* include/bits/atomic_timed_wait.h (__spin_until_impl): Accept
+	__wait_args as const __wait_args_base*.
+	(__wait_until_impl): Likewise.
+	(__wait_until): Likewise.
+	(__wait_for): Likewise.
+	(__atomic_wait_address_until): Pass __wait_args by address.
+	(__atomic_wait_address_for): Likewise.
+	* include/bits/atomic_wait.h (__wait_args_base): New struct.
+	(__wait_args): Derive from __wait_args_base.
+	(__wait_args::__wait_args()): Adjust ctors to call call base ctor.
+	(__wait_args::__wait_args(const __wait_args_base&)): New ctor.
+	(__wait_args::operator|=): New method.
+	(__wait_args::_S_flags_for): Change return type to
+	__wait_flags.
+	(__spin_impl): Accept __wait_args as const __wait_args_base*.
+	(__wait_impl): Likewise.
+	(__notify_impl): Likewise.
+	(__atomic_wait_address): Pass __wait_args by address.
+	(__atomic_wait_address_v): Likewise.
+	(__atomic_notify_address): Likewise.
+
+2025-05-30  Thomas Rodgers  <trodgers@redhat.com>
+
+	* include/bits/atomic_timed_wait.h:
+	(__detail::__platform_wait_until_impl): Rename to
+	__platform_wait_until.
+	(__detail::__platform_wait_until): Remove previous
+	definition.
+	(__detail::__cond_wait_until_impl): Rename to
+	__cond_wait_until.
+	(__detail::__cond_wait_until): Remove previous
+	definition.
+	(__detail::__spin_until_impl): New function.
+	(__detail::__wait_until_impl): New function.
+	(__detail::__wait_until): New function.
+	(__detail::__wait_for): New function.
+	(__detail::__timed_waiter_pool): Remove type.
+	(__detail::__timed_backoff_spin_policy): Remove type.
+	(__detail::__timed_waiter): Remove type.
+	(__detail::__enters_timed_wait): Remove type alias.
+	(__detail::__bare_timed_wait): Remove type alias.
+	(__atomic_wait_address_until): Adjust to new implementation
+	detail.
+	(__atomic_wait_address_until_v): Likewise.
+	(__atomic_wait_address_bare): Remove.
+	(__atomic_wait_address_for): Adjust to new implementation
+	detail.
+	(__atomic_wait_address_for_v): Likewise.
+	(__atomic_wait_address_for_bare): Remove.
+	* include/bits/atomic_wait.h: Include bits/stl_pair.h.
+	(__detail::__default_spin_policy): Remove type.
+	(__detail::__atomic_spin): Remove function.
+	(__detail::__waiter_pool_base): Rename to __waiter_pool_impl.
+	Remove _M_notify.  Rename _S_for to _S_impl_for.
+	(__detail::__waiter_base): Remove type.
+	(__detail::__waiter_pool): Remove type.
+	(__detail::__waiter): Remove type.
+	(__detail::__enters_wait): Remove type alias.
+	(__detail::__bare_wait): Remove type alias.
+	(__detail::__wait_flags): New enum.
+	(__detail::__wait_args): New struct.
+	(__detail::__wait_result_type): New type alias.
+	(__detail::__spin_impl): New function.
+	(__detail::__wait_impl): New function.
+	(__atomic_wait_address): Adjust to new implementation detail.
+	(__atomic_wait_address_v): Likewise.
+	(__atomic_notify_address): Likewise.
+	(__atomic_wait_address_bare): Delete.
+	(__atomic_notify_address_bare): Likewise.
+	* include/bits/semaphore_base.h: Adjust implementation to
+	use new __atomic_wait_address_v contract.
+	* include/std/barrier: Adjust implementation to use new
+	__atomic_wait contract.
+	* include/std/latch: Adjust implementation to use new
+	__atomic_wait contract.
+	* testsuite/29_atomics/atomic/wait_notify/100334.cc (main):
+	Adjust to for __detail::__waiter_pool_base renaming.
+
+2025-05-29  Patrick Palka  <ppalka@redhat.com>
+
+	* include/std/flat_map (_Flat_map_impl::operator==): Compare
+	keys and values separately.
+
+2025-05-29  Patrick Palka  <ppalka@redhat.com>
+	    Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/120465
+	* include/std/flat_map (_Flat_map_impl::_M_erase_if): Use a
+	projection with ranges::remove_if to pass a pair instead of
+	a tuple to the predicate.
+	* testsuite/23_containers/flat_map/1.cc (test07): Strengthen
+	to expect the argument passed to the predicate is a pair.
+	* testsuite/23_containers/flat_multimap/1.cc (test07): Likewise.
+
+2025-05-29  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/17_intro/names.cc [_AIX] (a): Undefine.
+	* testsuite/experimental/names.cc [_AIX] (ptr): Undefine.
+
+2025-05-29  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/22_locale/num_put/put/char/lwg4084.cc [_AIX]: Adjust
+	expected output for NaN and infinity.
+
+2025-05-29  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/23_containers/deque/capacity/shrink_to_fit.cc:
+	Remove dg-xfail-run-if for AIX.
+	* testsuite/23_containers/unordered_map/96088.cc: Replace
+	dg-xfail-run-if with dg-require-effective-target c++20.
+	* testsuite/23_containers/unordered_multimap/96088.cc: Likewise.
+	* testsuite/23_containers/unordered_multiset/96088.cc: Likewise.
+	* testsuite/23_containers/unordered_set/96088.cc: Likewise.
+
+2025-05-29  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/bits/boost_concept_check.h: Disable -Wlong-long
+	warnings.
+	* testsuite/24_iterators/operations/prev_neg.cc: Adjust dg-error
+	line number.
+
+2025-05-29  Jonathan Wakely  <jwakely@redhat.com>
+
+	* doc/xml/manual/test.xml: Remove outdated documentation on
+	testing with -std options in --target_board.
+	* doc/html/manual/test.html: Regenerate.
+
+2025-05-27  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/17_intro/names.cc [_AIX] (n): Undefine.
+	* testsuite/experimental/names.cc [_AIX] (ptr): Undefine.
+
+2025-05-27  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/std/format/debug.cc: Disable for targets with 16-bit
+	wchar_t.
+	* testsuite/std/format/functions/format.cc: Use -DUNICODE for
+	targets with 32-bit wchar_t.
+	(test_unicode) [UNICODE]: Only run checks when UNICODE is
+	defined.
+
+2025-05-27  Jonathan Wakely  <jwakely@redhat.com>
+
+	* include/Makefile.in: Regenerate.
+
+2025-05-27  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/96710
+	* include/bits/std_abs.h [__SIZEOF_INT128__] (abs(__int128)):
+	Define.
+	[_GLIBCXX_USE_FLOAT128] (abs(__float128)): Enable definition for
+	strict modes.
+	* testsuite/26_numerics/headers/cmath/82644.cc: Use strict_std
+	instead of defining __STRICT_ANSI__.
+	* testsuite/26_numerics/headers/cstdlib/abs128.cc: New test.
+
+2025-05-27  Luc Grosheintz  <luc.grosheintz@gmail.com>
+
+	* include/std/mdspan: Value initialize the array storing the
+	dynamic extents.
+	* testsuite/23_containers/mdspan/extents/ctor_default.cc: New
+	test.
+
+2025-05-26  Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	PR libstdc++/119152
+	* testsuite/std/memory/indirect/ctor.cc: Run test_inplace_ctor.
+
+2025-05-26  Jonathan Wakely  <jwakely@redhat.com>
+	    Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	PR libstdc++/119152
+	* doc/doxygen/stdheader.cc: Added indirect.h file.
+	* include/Makefile.am: Add new header.
+	* include/Makefile.in: Regenerate.
+	* include/bits/indirect.h: New file.
+	* include/bits/version.def (indirect): Define.
+	* include/bits/version.h: Regenerate.
+	* include/std/memory: Include new header.
+	* testsuite/std/memory/indirect/copy.cc
+	* testsuite/std/memory/indirect/copy_alloc.cc
+	* testsuite/std/memory/indirect/ctor.cc
+	* testsuite/std/memory/indirect/incomplete.cc
+	* testsuite/std/memory/indirect/invalid_neg.cc
+	* testsuite/std/memory/indirect/move.cc
+	* testsuite/std/memory/indirect/move_alloc.cc
+	* testsuite/std/memory/indirect/relops.cc
+
+2025-05-26  Tomasz Kamiński  <tkaminsk@redhat.com>
+
+	PR libstdc++/119126
+	* doc/doxygen/stdheader.cc: Added funcref_impl.h file.
+	* include/Makefile.am: Added funcref_impl.h file.
+	* include/Makefile.in: Added funcref_impl.h file.
+	* include/bits/funcref_impl.h: New file.
+	* include/bits/funcwrap.h: (_Ptrs::_M_obj): Const-qualify.
+	(_Storage::_M_ptr, _Storage::_M_ref): Remove.
+	(__polyfunc::__cast_to) Define.
+	(_Base_invoker::_S_ptrs, _Base_invoker::_S_nttp)
+	(_Base_invoker::_S_bind_ptrs, _Base_invoker::_S_bind_ref)
+	(_Base_invoker::_S_call_ptrs): Define.
+	(_Base_invoker::_S_call_storage): Foward to _S_call_ptrs.
+	(_Manager::_S_local, _Manager::_S_ptr): Adjust for _M_obj being
+	const qualified.
+	(__polyfunc::_Manager, __polyfunc::_Mo_base): Guard with
+	__glibcxx_move_only_function || __glibcxx_copyable_function.
+	(__polyfunc::__skip_first_arg, __polyfunc::__deduce_funcref)
+	(std::function_ref) [__glibcxx_function_ref]: Define.
+	* include/bits/utility.h (std::nontype_t, std::nontype)
+	(__is_nontype_v) [__glibcxx_function_ref]: Define.
+	* include/bits/version.def: Define function_ref.
+	* include/bits/version.h: Regenerate.
+	* include/std/functional: Define __cpp_lib_function_ref.
+	* src/c++23/std.cc.in (std::nontype_t, std::nontype)
+	(std::function_ref) [__cpp_lib_function_ref]: Export.
+	* testsuite/20_util/function_ref/assign.cc: New test.
+	* testsuite/20_util/function_ref/call.cc: New test.
+	* testsuite/20_util/function_ref/cons.cc: New test.
+	* testsuite/20_util/function_ref/cons_neg.cc: New test.
+	* testsuite/20_util/function_ref/conv.cc: New test.
+	* testsuite/20_util/function_ref/deduction.cc: New test.
+	* testsuite/20_util/function_ref/mutation.cc: New test.
+
 2025-05-23  Jonathan Wakely  <jwakely@redhat.com>
 
 	PR libstdc++/120384

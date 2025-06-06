@@ -1363,7 +1363,7 @@ ftms = {
     v = 201907;
     cxxmin = 20;
     hosted = yes;
-    extra_cond = "__glibcxx_atomic_wait || _GLIBCXX_HAVE_POSIX_SEMAPHORE";
+    extra_cond = "__glibcxx_atomic_wait";
   };
 };
 
@@ -1656,6 +1656,14 @@ ftms = {
   name = ranges_find_last;
   values = {
     v = 202207;
+    cxxmin = 23;
+  };
+};
+
+ftms = {
+  name = ranges_starts_ends_with;
+  values = {
+    v = 202106;
     cxxmin = 23;
   };
 };
@@ -1971,6 +1979,15 @@ ftms = {
 
 ftms = {
   name = indirect;
+  values = {
+    v = 202502;
+    cxxmin = 26;
+    hosted = yes;
+  };
+};
+
+ftms = {
+  name = polymorphic;
   values = {
     v = 202502;
     cxxmin = 26;

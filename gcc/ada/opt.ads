@@ -308,6 +308,10 @@ package Opt is
    --  GNATMAKE
    --  Set to True to check readonly files during the make process
 
+   Check_Semantics_Only_Mode : Boolean := False;
+   --  GNATMAKE
+   --  Set to True when -gnatc is present to only perform semantic checking.
+
    Check_Source_Files : Boolean := True;
    --  GNATBIND, GNATMAKE
    --  Set to True to enable consistency checking for any source files that
@@ -1517,10 +1521,6 @@ package Opt is
    --  Remember location of previous Task_Dispatching_Policy pragma. This is
    --  used for inconsistency error messages. A value of System_Location is
    --  used if the policy is set in package System.
-
-   Tasking_Used : Boolean := False;
-   --  Set True if any tasking construct is encountered. Used to activate the
-   --  output of the Q, L and T lines in ALI files.
 
    Time_Slice_Set : Boolean := False;
    --  GNATBIND

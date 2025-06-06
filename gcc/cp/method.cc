@@ -2251,6 +2251,8 @@ constructible_expr (tree to, tree from)
   const int len = TREE_VEC_LENGTH (from);
   if (CLASS_TYPE_P (to))
     {
+      if (ABSTRACT_CLASS_TYPE_P (to))
+	return error_mark_node;
       tree ctype = to;
       vec<tree, va_gc> *args = NULL;
       if (!TYPE_REF_P (to))
@@ -2330,6 +2332,37 @@ constructible_expr (tree to, tree from)
   return expr;
 }
 
+/* Valid if "Either T is a reference type, or T is a complete object type for
+   which the expression declval<U&>().~U() is well-formed when treated as an
+   unevaluated operand ([expr.context]), where U is remove_all_extents_t<T>."
+
+   For a class U, return the destructor call; otherwise return void_node if
+   valid or error_mark_node if not.  */
+
+static tree
+destructible_expr (tree to)
+{
+  cp_unevaluated cp_uneval_guard;
+  int flags = LOOKUP_NORMAL|LOOKUP_DESTRUCTOR;
+  if (TYPE_REF_P (to))
+    return void_node;
+  if (!COMPLETE_TYPE_P (complete_type (to)))
+    return error_mark_node;
+  to = strip_array_types (to);
+  if (CLASS_TYPE_P (to))
+    {
+      to = build_trait_object (to);
+      return build_delete (input_location, TREE_TYPE (to), to,
+			     sfk_complete_destructor, flags, 0, tf_none);
+    }
+  /* [expr.prim.id.dtor] If the id-expression names a pseudo-destructor, T
+     shall be a scalar type.... */
+  else if (scalarish_type_p (to))
+    return void_node;
+  else
+    return error_mark_node;
+}
+
 /* Returns a tree iff TO is assignable (if CODE is MODIFY_EXPR) or
    constructible (otherwise) from FROM, which is a single type for
    assignment or a list of types for construction.  */
@@ -2339,13 +2372,15 @@ is_xible_helper (enum tree_code code, tree to, tree from, bool trivial)
 {
   to = complete_type (to);
   deferring_access_check_sentinel acs (dk_no_deferred);
-  if (VOID_TYPE_P (to) || ABSTRACT_CLASS_TYPE_P (to)
+  if (VOID_TYPE_P (to)
       || (from && FUNC_OR_METHOD_TYPE_P (from)
 	  && (TYPE_READONLY (from) || FUNCTION_REF_QUALIFIED (from))))
     return error_mark_node;
   tree expr;
   if (code == MODIFY_EXPR)
     expr = assignable_expr (to, from);
+  else if (code == BIT_NOT_EXPR)
+    expr = destructible_expr (to);
   else if (trivial && TREE_VEC_LENGTH (from) > 1
 	   && cxx_dialect < cxx20)
     return error_mark_node; // only 0- and 1-argument ctors can be trivial

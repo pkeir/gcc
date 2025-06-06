@@ -2027,8 +2027,10 @@ expand_one_await_expression (tree *expr, tree *await_expr, void *d)
   tree awaiter_calls = TREE_OPERAND (saved_co_await, 3);
 
   tree source = TREE_OPERAND (saved_co_await, 4);
-  bool is_final = (source
-		   && TREE_INT_CST_LOW (source) == (int) FINAL_SUSPEND_POINT);
+  bool is_final
+    = (source && TREE_INT_CST_LOW (source) == (int) FINAL_SUSPEND_POINT);
+  bool is_initial
+    = (source && TREE_INT_CST_LOW (source) == (int) INITIAL_SUSPEND_POINT);
 
   /* Build labels for the destinations of the control flow when we are resuming
      or destroying.  */
@@ -2155,6 +2157,13 @@ expand_one_await_expression (tree *expr, tree *await_expr, void *d)
 
   /* Resume point.  */
   add_stmt (build_stmt (loc, LABEL_EXPR, resume_label));
+
+  if (is_initial && data->i_a_r_c)
+    {
+      r = cp_build_modify_expr (loc, data->i_a_r_c, NOP_EXPR, boolean_true_node,
+				tf_warning_or_error);
+      finish_expr_stmt (r);
+    }
 
   /* This will produce the value (if one is provided) from the co_await
      expression.  */
@@ -2543,8 +2552,8 @@ build_actor_fn (location_t loc, tree coro_frame_type, tree actor, tree fnbody,
 
   /* Finish the resume dispatcher.  */
   finish_switch_stmt (dispatcher);
-  finish_else_clause (lsb_if);
 
+  finish_else_clause (lsb_if);
   finish_if_stmt (lsb_if);
 
   /* If we reach here then we've hit UB.  */
@@ -2583,37 +2592,32 @@ build_actor_fn (location_t loc, tree coro_frame_type, tree actor, tree fnbody,
   /* Add in our function body with the co_returns rewritten to final form.  */
   add_stmt (fnbody);
 
-  /* now do the tail of the function.  */
+  /* Now do the tail of the function; first cleanups.  */
   r = build_stmt (loc, LABEL_EXPR, del_promise_label);
   add_stmt (r);
 
-  /* Destructors for the things we built explicitly.  */
+  /* Destructors for the things we built explicitly.
+     promise... */
   if (tree c = cxx_maybe_build_cleanup (promise_proxy, tf_warning_or_error))
-    add_stmt (c);
+    finish_expr_stmt (c);
 
-  tree del_frame_label
-    = create_named_label_with_ctx (loc, "coro.delete.frame", actor);
-  r = build_stmt (loc, LABEL_EXPR, del_frame_label);
-  add_stmt (r);
-
-  /* Here deallocate the frame (if we allocated it), which we will have at
-     present.  */
-  tree fnf2_x
-   = coro_build_frame_access_expr (actor_frame, coro_frame_needs_free_id,
-				   false, tf_warning_or_error);
-
-  tree need_free_if = begin_if_stmt ();
-  fnf2_x = build1 (CONVERT_EXPR, integer_type_node, fnf2_x);
-  tree cmp = build2 (NE_EXPR, integer_type_node, fnf2_x, integer_zero_node);
-  finish_if_stmt_cond (cmp, need_free_if);
+  /* Argument copies ...  */
   while (!param_dtor_list->is_empty ())
     {
       tree parm_id = param_dtor_list->pop ();
       tree a = coro_build_frame_access_expr (actor_frame, parm_id, false,
 					     tf_warning_or_error);
       if (tree dtor = cxx_maybe_build_cleanup (a, tf_warning_or_error))
-	add_stmt (dtor);
+	finish_expr_stmt (dtor);
     }
+
+  /* Here deallocate the frame (if we allocated it), which we will have at
+     present.  */
+  tree fnf2_x
+   = coro_build_frame_access_expr (actor_frame, coro_frame_needs_free_id,
+				   false, tf_warning_or_error);
+  tree need_free_if = begin_if_stmt ();
+  finish_if_stmt_cond (fnf2_x, need_free_if);
 
   /* Build the frame DTOR.  */
   tree del_coro_fr
@@ -2621,31 +2625,20 @@ build_actor_fn (location_t loc, tree coro_frame_type, tree actor, tree fnbody,
 					 promise_type, loc);
   finish_expr_stmt (del_coro_fr);
   finish_then_clause (need_free_if);
-  tree scope = IF_SCOPE (need_free_if);
-  IF_SCOPE (need_free_if) = NULL;
-  r = do_poplevel (scope);
-  add_stmt (r);
+  finish_if_stmt (need_free_if);
 
-  /* done.  */
-  r = build_stmt (loc, RETURN_EXPR, NULL);
-  suppress_warning (r); /* We don't want a warning about this.  */
-  r = maybe_cleanup_point_expr_void (r);
-  add_stmt (r);
+  /* Done.  */
+  finish_return_stmt (NULL_TREE);
 
   /* This is the suspend return point.  */
-  r = build_stmt (loc, LABEL_EXPR, ret_label);
-  add_stmt (r);
+  add_stmt (build_stmt (loc, LABEL_EXPR, ret_label));
 
-  r = build_stmt (loc, RETURN_EXPR, NULL);
-  suppress_warning (r); /* We don't want a warning about this.  */
-  r = maybe_cleanup_point_expr_void (r);
-  add_stmt (r);
+  finish_return_stmt (NULL_TREE);
 
   /* This is the 'continuation' return point.  For such a case we have a coro
      handle (from the await_suspend() call) and we want handle.resume() to
      execute as a tailcall allowing arbitrary chaining of coroutines.  */
-  r = build_stmt (loc, LABEL_EXPR, continue_label);
-  add_stmt (r);
+  add_stmt (build_stmt (loc, LABEL_EXPR, continue_label));
 
   /* Should have been set earlier by the coro_initialized code.  */
   gcc_assert (void_coro_handle_address);
@@ -2670,8 +2663,12 @@ build_actor_fn (location_t loc, tree coro_frame_type, tree actor, tree fnbody,
 
   /* We've now rewritten the tree and added the initial and final
      co_awaits.  Now pass over the tree and expand the co_awaits.  */
+  tree i_a_r_c = NULL_TREE;
+  if (flag_exceptions)
+    i_a_r_c = coro_build_frame_access_expr (actor_frame, coro_frame_i_a_r_c_id,
+					   false, tf_warning_or_error);
 
-  coro_aw_data data = {actor, actor_fp, resume_idx_var, NULL_TREE,
+  coro_aw_data data = {actor, actor_fp, resume_idx_var, i_a_r_c,
 		       ash, del_promise_label, ret_label,
 		       continue_label, restart_dispatch_label, continuation, 2};
   cp_walk_tree (&actor_body, await_statement_expander, &data, NULL);
@@ -2865,8 +2862,8 @@ find_any_await (tree *stmt, int *dosub, void *d)
   if (TREE_CODE (*stmt) == CO_AWAIT_EXPR)
     {
       *dosub = 0; /* We don't need to consider this any further.  */
-      tree **p = (tree **) d;
-      *p = stmt;
+      if (d)
+	*(tree **)d = stmt;
       return *stmt;
     }
   return NULL_TREE;
@@ -3116,7 +3113,9 @@ flatten_await_stmt (var_nest_node *n, hash_set<tree> *promoted,
 	  bool already_present = promoted->add (var);
 	  gcc_checking_assert (!already_present);
 	  tree inner = TARGET_EXPR_INITIAL (init);
-	  gcc_checking_assert (TREE_CODE (inner) != COND_EXPR);
+	  gcc_checking_assert
+	    (TREE_CODE (inner) != COND_EXPR
+	     || !cp_walk_tree (&inner, find_any_await, nullptr, nullptr));
 	  init = cp_build_modify_expr (input_location, var, INIT_EXPR, init,
 				       tf_warning_or_error);
 	  /* Simplify for the case that we have an init containing the temp
@@ -4028,12 +4027,14 @@ rewrite_param_uses (tree *stmt, int *do_subtree ATTRIBUTE_UNUSED, void *d)
 }
 
 /* Build up a set of info that determines how each param copy will be
-   handled.  */
+   handled.  We store this in a hash map so that we can access it from
+   a tree walk callback that re-writes the original parameters to their
+   copies.  */
 
-static void
-analyze_fn_parms (tree orig, hash_map<tree, param_info> *param_uses)
+void
+cp_coroutine_transform::analyze_fn_parms ()
 {
-  if (!DECL_ARGUMENTS (orig))
+  if (!DECL_ARGUMENTS (orig_fn_decl))
     return;
 
   /* Build a hash map with an entry for each param.
@@ -4043,19 +4044,19 @@ analyze_fn_parms (tree orig, hash_map<tree, param_info> *param_uses)
      Then a tree list of the uses.
      The second two entries start out empty - and only get populated
      when we see uses.  */
-  bool lambda_p = LAMBDA_FUNCTION_P (orig);
+  bool lambda_p = LAMBDA_FUNCTION_P (orig_fn_decl);
 
   /* Count the param copies from 1 as per the std.  */
   unsigned parm_num = 1;
-  for (tree arg = DECL_ARGUMENTS (orig); arg != NULL;
+  for (tree arg = DECL_ARGUMENTS (orig_fn_decl); arg != NULL;
        ++parm_num, arg = DECL_CHAIN (arg))
     {
       bool existed;
-      param_info &parm = param_uses->get_or_insert (arg, &existed);
+      param_info &parm = param_uses.get_or_insert (arg, &existed);
       gcc_checking_assert (!existed);
       parm.body_uses = NULL;
       tree actual_type = TREE_TYPE (arg);
-      actual_type = complete_type_or_else (actual_type, orig);
+      actual_type = complete_type_or_else (actual_type, orig_fn_decl);
       if (actual_type == NULL_TREE)
 	actual_type = error_mark_node;
       parm.orig_type = actual_type;
@@ -4089,17 +4090,7 @@ analyze_fn_parms (tree orig, hash_map<tree, param_info> *param_uses)
 	}
       parm.field_id = name;
       if (TYPE_HAS_NONTRIVIAL_DESTRUCTOR (parm.frame_type))
-	{
-	  char *buf = xasprintf ("_Coro_q%u_%s_live", parm_num,
-				 DECL_NAME (arg) ? IDENTIFIER_POINTER (name)
-						 : "__unnamed");
-	  parm.guard_var
-	    = coro_build_artificial_var (UNKNOWN_LOCATION, get_identifier (buf),
-					 boolean_type_node, orig,
-					 boolean_false_node);
-	  free (buf);
-	  parm.trivial_dtor = false;
-	}
+	parm.trivial_dtor = false;
       else
 	parm.trivial_dtor = true;
     }
@@ -4459,30 +4450,6 @@ cp_coroutine_transform::wrap_original_function_body ()
       tree tcb = build_stmt (loc, TRY_BLOCK, NULL_TREE, NULL_TREE);
       add_stmt (tcb);
       TRY_STMTS (tcb) = push_stmt_list ();
-      if (initial_await != error_mark_node)
-	{
-	  /* Build a compound expression that sets the
-	     initial-await-resume-called variable true and then calls the
-	     initial suspend expression await resume.
-	     In the case that the user decides to make the initial await
-	     await_resume() return a value, we need to discard it and, it is
-	     a reference type, look past the indirection.  */
-	  if (INDIRECT_REF_P (initial_await))
-	    initial_await = TREE_OPERAND (initial_await, 0);
-	  /* In the case that the initial_await returns a target expression
-	     we might need to look through that to update the await expr.  */
-	  tree iaw = initial_await;
-	  if (TREE_CODE (iaw) == TARGET_EXPR)
-	    iaw = TARGET_EXPR_INITIAL (iaw);
-	  gcc_checking_assert (TREE_CODE (iaw) == CO_AWAIT_EXPR);
-	  tree vec = TREE_OPERAND (iaw, 3);
-	  tree aw_r = TREE_VEC_ELT (vec, 2);
-	  aw_r = convert_to_void (aw_r, ICV_STATEMENT, tf_warning_or_error);
-	  tree update = build2 (MODIFY_EXPR, boolean_type_node, i_a_r_c,
-				boolean_true_node);
-	  aw_r = cp_build_compound_expr (update, aw_r, tf_warning_or_error);
-	  TREE_VEC_ELT (vec, 2) = aw_r;
-	}
       /* Add the initial await to the start of the user-authored function.  */
       finish_expr_stmt (initial_await);
       /* Append the original function body.  */
@@ -4944,7 +4911,7 @@ cp_coroutine_transform::build_ramp_function ()
       tree frame_cleanup = push_stmt_list ();
       tree do_fr_cleanup
 	= build1_loc (loc, TRUTH_NOT_EXPR, boolean_type_node, iarc_x);
-      do_fr_cleanup = build2_loc (loc, TRUTH_AND_EXPR, boolean_type_node,
+      do_fr_cleanup = build2_loc (loc, TRUTH_ANDIF_EXPR, boolean_type_node,
 				  coro_before_return, do_fr_cleanup);
       r = build3 (COND_EXPR, void_type_node, do_fr_cleanup,
 			     delete_frame_call, void_node);
@@ -5036,7 +5003,7 @@ cp_coroutine_transform::build_ramp_function ()
 		  tree do_cleanup
 		    = build1_loc (loc, TRUTH_NOT_EXPR, boolean_type_node, iarc_x);
 		  do_cleanup
-		    = build2_loc (loc, TRUTH_AND_EXPR, boolean_type_node,
+		    = build2_loc (loc, TRUTH_ANDIF_EXPR, boolean_type_node,
 				  coro_before_return, do_cleanup);
 		  r = build3_loc (loc, COND_EXPR, void_type_node, do_cleanup,
 				  parm.fr_copy_dtor, void_node);
@@ -5096,7 +5063,7 @@ cp_coroutine_transform::build_ramp_function ()
 	  tree promise_cleanup = push_stmt_list ();
 	  tree do_cleanup
 	    = build1_loc (loc, TRUTH_NOT_EXPR, boolean_type_node, iarc_x);
-	  do_cleanup = build2_loc (loc, TRUTH_AND_EXPR, boolean_type_node,
+	  do_cleanup = build2_loc (loc, TRUTH_ANDIF_EXPR, boolean_type_node,
 				   coro_before_return, do_cleanup);
 	  r = build3 (COND_EXPR, void_type_node, do_cleanup,
 		      promise_dtor, void_node);
@@ -5284,7 +5251,7 @@ cp_coroutine_transform::apply_transforms ()
 
   /* Collect information on the original function params and their use in the
      function body.  */
-  analyze_fn_parms (orig_fn_decl, &param_uses);
+  analyze_fn_parms ();
 
   /* Declare the actor and destroyer functions, the following code needs to
      see these.  */

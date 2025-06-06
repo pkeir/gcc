@@ -769,7 +769,6 @@ package body Exp_Ch4 is
       --  Local variables
 
       Aggr_In_Place     : Boolean;
-      Container_Aggr    : Boolean;
       Delayed_Cond_Expr : Boolean;
 
       TagT : Entity_Id := Empty;
@@ -865,13 +864,15 @@ package body Exp_Ch4 is
 
       Aggr_In_Place     := Is_Delayed_Aggregate (Exp);
       Delayed_Cond_Expr := Is_Delayed_Conditional_Expression (Exp);
-      Container_Aggr    := Nkind (Exp) = N_Aggregate
-                             and then Has_Aspect (T, Aspect_Aggregate);
 
-      --  An allocator with a container aggregate as qualified expression must
-      --  be rewritten into the form expected by Expand_Container_Aggregate.
+      --  An allocator with a container aggregate, resp. a 2-pass aggregate,
+      --  as qualified expression must be rewritten into the form expected by
+      --  Expand_Container_Aggregate, resp. Two_Pass_Aggregate_Expansion.
 
-      if Container_Aggr then
+      if Nkind (Exp) = N_Aggregate
+        and then (Has_Aspect (T, Aspect_Aggregate)
+                   or else Is_Two_Pass_Aggregate (Exp))
+      then
          Temp := Make_Temporary (Loc, 'P', N);
          Set_Analyzed (Exp, False);
          Insert_Action (N,
@@ -4488,6 +4489,15 @@ package body Exp_Ch4 is
                                   N_Object_Declaration)
       then
          Error_Msg_N ("?_a?use of an anonymous access type allocator", N);
+      end if;
+
+      --  Here we set no initialization on types with constructors since we
+      --  generate initialization for the separately.
+
+      if Present (Constructor_Name (Directly_Designated_Type (PtrT)))
+        and then Nkind (Expression (N)) = N_Identifier
+      then
+         Set_No_Initialization (N, False);
       end if;
 
       --  RM E.2.2(17). We enforce that the expected type of an allocator
@@ -13291,10 +13301,12 @@ package body Exp_Ch4 is
       Obj_Decl : constant Node_Id :=
         Make_Object_Declaration (Loc,
           Defining_Identifier => Obj_Id,
-          Aliased_Present     => Aliased_Present (Decl),
+          Aliased_Present     => True,
           Constant_Present    => Constant_Present (Decl),
           Object_Definition   => New_Copy_Tree (Object_Definition (Decl)),
           Expression          => Relocate_Node (Expr));
+      --  We make the object unconditionally aliased to avoid dangling bound
+      --  issues when its nominal subtype is an unconstrained array type.
 
       Master_Node_Decl : Node_Id;
       Master_Node_Id   : Entity_Id;
@@ -13308,6 +13320,11 @@ package body Exp_Ch4 is
       end if;
 
       Insert_Action (Expr, Obj_Decl);
+
+      --  The object can never be local to an elaboration routine at library
+      --  level since we will take 'Unrestricted_Access of it.
+
+      Set_Is_Statically_Allocated (Obj_Id, Is_Library_Level_Entity (Obj_Id));
 
       --  If the object needs finalization, we need to insert its Master_Node
       --  manually because 1) the machinery in Exp_Ch7 will not pick it since
@@ -15035,10 +15052,11 @@ package body Exp_Ch4 is
 
       --  Handle entities from the limited view
 
-      Orig_Right_Type : constant Entity_Id := Available_View (Etype (Right));
+      Orig_Right_Type : constant Entity_Id :=
+        Base_Type (Available_View (Etype (Right)));
 
       Full_R_Typ   : Entity_Id;
-      Left_Type    : Entity_Id := Available_View (Etype (Left));
+      Left_Type    : Entity_Id := Base_Type (Available_View (Etype (Left)));
       Right_Type   : Entity_Id := Orig_Right_Type;
       Obj_Tag      : Node_Id;
 

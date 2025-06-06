@@ -647,6 +647,10 @@ package Sem_Util is
    --  as Needs_Finalization except with pragma Restrictions (No_Finalization),
    --  in which case we know that class-wide objects do not need finalization.
 
+   function Default_Constructor (Typ : Entity_Id) return Entity_Id;
+   --  Determine the default constructor (e.g. the constructor with only one
+   --  formal parameter) for a given type Typ.
+
    function Defining_Entity (N : Node_Id) return Entity_Id;
    --  Given a declaration N, returns the associated defining entity. If the
    --  declaration has a specification, the entity is obtained from the
@@ -2095,6 +2099,10 @@ package Sem_Util is
    --  Determine whether arbitrary declaration Decl denotes a generic package,
    --  a generic subprogram or a generic body.
 
+   function Is_In_Context_Clause (N : Node_Id) return Boolean;
+   --  Returns True if N appears within the context clause of a unit, and False
+   --  for any other placement.
+
    function Is_Independent_Object (N : Node_Id) return Boolean;
    --  Determine whether arbitrary node N denotes a reference to an independent
    --  object as per RM C.6(8).
@@ -2377,6 +2385,7 @@ package Sem_Util is
    --    Pre
    --    Pre_Class
    --    Precondition
+   --    Program_Exit
    --    Refined_Depends
    --    Refined_Global
    --    Refined_Post
@@ -2535,12 +2544,6 @@ package Sem_Util is
    --  no argument, but for the specific entity given. The call has no effect
    --  if the entity Ent is not for an object. Last_Assignment_Only has the
    --  same meaning as for the call with no Ent.
-
-   procedure Kill_Size_Check_Code (E : Entity_Id);
-   --  Called when an address clause or pragma Import is applied to an entity.
-   --  If the entity is a variable or a constant, and size check code is
-   --  present, this size check code is killed, since the object will not be
-   --  allocated by the program.
 
    function Known_Non_Null (N : Node_Id) return Boolean;
    --  Given a node N for a subexpression of an access type, determines if
@@ -2861,6 +2864,9 @@ package Sem_Util is
    --
    --  WARNING: this routine should be used in debugging scenarios such as
    --  tracking down undefined symbols as it is fairly low level.
+
+   function Parameter_Count (Subp : Entity_Id) return Nat;
+   --  Return the number of parameters for a given subprogram Subp.
 
    function Param_Entity (N : Node_Id) return Entity_Id;
    --  Given an expression N, determines if the expression is a reference

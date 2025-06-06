@@ -1081,10 +1081,12 @@ package body Exp_Util is
                 Make_Attribute_Reference (Loc,
                   Prefix         =>
                     (if Is_Allocate then
-                       Duplicate_Subexpr_No_Checks (Expression (Alloc_Expr))
+                       Duplicate_Subexpr_No_Checks
+                         (Expression (Alloc_Expr), New_Scope => Proc_Id)
                      else
                        Make_Explicit_Dereference (Loc,
-                         Duplicate_Subexpr_No_Checks (Expr))),
+                         Duplicate_Subexpr_No_Checks
+                           (Expr, New_Scope => Proc_Id))),
                   Attribute_Name => Name_Alignment)));
          end if;
 
@@ -1137,7 +1139,9 @@ package body Exp_Util is
                   if Is_RTE (Etype (Temp), RE_Tag_Ptr) then
                      Param :=
                        Make_Explicit_Dereference (Loc,
-                         Prefix => Duplicate_Subexpr_No_Checks (Temp));
+                         Prefix =>
+                           Duplicate_Subexpr_No_Checks
+                             (Temp, New_Scope => Proc_Id));
 
                   --  In the default case, obtain the tag of the object about
                   --  to be allocated / deallocated. Generate:
@@ -1157,7 +1161,9 @@ package body Exp_Util is
 
                      Param :=
                        Make_Attribute_Reference (Loc,
-                         Prefix         => Duplicate_Subexpr_No_Checks (Temp),
+                         Prefix         =>
+                           Duplicate_Subexpr_No_Checks
+                             (Temp, New_Scope => Proc_Id),
                          Attribute_Name => Name_Tag);
                   end if;
 
@@ -1956,7 +1962,7 @@ package body Exp_Util is
          --  time capture the visibility of the proper package part.
 
          Set_Parent (Expr, Typ_Decl);
-         Preanalyze_Assert_Expression (Expr, Any_Boolean);
+         Preanalyze_And_Resolve_Assert_Expression (Expr, Any_Boolean);
 
          --  Save a copy of the expression with all replacements and analysis
          --  already taken place in case a derived type inherits the pragma.
@@ -1969,8 +1975,8 @@ package body Exp_Util is
 
          --  If the pragma comes from an aspect specification, replace the
          --  saved expression because all type references must be substituted
-         --  for the call to Preanalyze_Spec_Expression in Check_Aspect_At_xxx
-         --  routines.
+         --  for the call to Preanalyze_And_Resolve_Spec_Expression in
+         --  Check_Aspect_At_xxx routines.
 
          if Present (DIC_Asp) then
             Set_Expression_Copy (DIC_Asp, New_Copy_Tree (Expr));
@@ -3217,7 +3223,7 @@ package body Exp_Util is
                --  part.
 
                Set_Parent (Expr, Parent (Prag_Expr));
-               Preanalyze_Assert_Expression (Expr, Any_Boolean);
+               Preanalyze_And_Resolve_Assert_Expression (Expr, Any_Boolean);
 
                --  Save a copy of the expression when T is tagged to detect
                --  errors and capture the visibility of the proper package part
@@ -3229,8 +3235,8 @@ package body Exp_Util is
 
                --  If the pragma comes from an aspect specification, replace
                --  the saved expression because all type references must be
-               --  substituted for the call to Preanalyze_Spec_Expression in
-               --  Check_Aspect_At_xxx routines.
+               --  substituted for the call to Preanalyze_And_Resolve_Spec_
+               --  Expression in Check_Aspect_At_xxx routines.
 
                if Present (Prag_Asp) then
                   Set_Expression_Copy (Prag_Asp, New_Copy_Tree (Expr));
@@ -5062,12 +5068,13 @@ package body Exp_Util is
 
    function Duplicate_Subexpr
      (Exp          : Node_Id;
-      Name_Req     : Boolean := False;
-      Renaming_Req : Boolean := False) return Node_Id
+      New_Scope    : Entity_Id := Empty;
+      Name_Req     : Boolean   := False;
+      Renaming_Req : Boolean   := False) return Node_Id
    is
    begin
       Remove_Side_Effects (Exp, Name_Req, Renaming_Req);
-      return New_Copy_Tree (Exp);
+      return New_Copy_Tree (Exp, New_Scope => New_Scope);
    end Duplicate_Subexpr;
 
    ---------------------------------
@@ -5076,8 +5083,9 @@ package body Exp_Util is
 
    function Duplicate_Subexpr_No_Checks
      (Exp          : Node_Id;
-      Name_Req     : Boolean := False;
-      Renaming_Req : Boolean := False) return Node_Id
+      New_Scope    : Entity_Id := Empty;
+      Name_Req     : Boolean   := False;
+      Renaming_Req : Boolean   := False) return Node_Id
    is
       New_Exp : Node_Id;
 
@@ -5087,7 +5095,7 @@ package body Exp_Util is
          Name_Req     => Name_Req,
          Renaming_Req => Renaming_Req);
 
-      New_Exp := New_Copy_Tree (Exp);
+      New_Exp := New_Copy_Tree (Exp, New_Scope => New_Scope);
       Remove_Checks (New_Exp);
       return New_Exp;
    end Duplicate_Subexpr_No_Checks;
@@ -5098,14 +5106,15 @@ package body Exp_Util is
 
    function Duplicate_Subexpr_Move_Checks
      (Exp          : Node_Id;
-      Name_Req     : Boolean := False;
-      Renaming_Req : Boolean := False) return Node_Id
+      New_Scope    : Entity_Id := Empty;
+      Name_Req     : Boolean   := False;
+      Renaming_Req : Boolean   := False) return Node_Id
    is
       New_Exp : Node_Id;
 
    begin
       Remove_Side_Effects (Exp, Name_Req, Renaming_Req);
-      New_Exp := New_Copy_Tree (Exp);
+      New_Exp := New_Copy_Tree (Exp, New_Scope => New_Scope);
       Remove_Checks (Exp);
       return New_Exp;
    end Duplicate_Subexpr_Move_Checks;
@@ -10871,11 +10880,10 @@ package body Exp_Util is
          --  operator on private type might not be visible and won't be
          --  resolved.
 
-         else pragma Assert (Is_RTE (Base_Type (Typ), RE_Big_Integer)
-                               or else
-                             Is_RTE (Base_Type (Typ), RO_GH_Big_Integer)
-                               or else
-                             Is_RTE (Base_Type (Typ), RO_SP_Big_Integer));
+         else
+            pragma Assert
+              (Is_RTE (Base_Type (Typ), RE_Big_Integer)
+               or else Is_RTE (Base_Type (Typ), RO_SP_Big_Integer));
             return
               Make_Function_Call (Loc,
                 Name                   =>
@@ -14466,7 +14474,16 @@ package body Exp_Util is
       else
          N := First (L);
          while Present (N) loop
-            if not Side_Effect_Free (N, Name_Req, Variable_Ref) then
+            if Nkind (N) = N_Parameter_Association then
+               if not
+                 Side_Effect_Free
+                  (Explicit_Actual_Parameter (N), Name_Req, Variable_Ref)
+               then
+                  return False;
+               end if;
+
+               Next (N);
+            elsif not Side_Effect_Free (N, Name_Req, Variable_Ref) then
                return False;
             else
                Next (N);

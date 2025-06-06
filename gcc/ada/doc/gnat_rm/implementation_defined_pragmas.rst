@@ -1940,7 +1940,8 @@ Syntax:
   EXIT_CASE      ::= GUARD => EXIT_KIND
   EXIT_KIND      ::= Normal_Return
                    | Exception_Raised
-		   | (Exception_Raised => exception_name)
+                   | (Exception_Raised => exception_name)
+                   | Program_Exit
   GUARD          ::= Boolean_expression
 
 For the semantics of this aspect, see the SPARK 2014 Reference Manual, section
@@ -5284,6 +5285,20 @@ generating ``Restrictions`` pragmas, it generates
 ``Restriction_Warnings`` pragmas. The result is that
 violations of the profile generate warning messages instead
 of error messages.
+
+.. _Pragma-Program_Exit:
+
+Pragma Program_Exit
+===================
+
+Syntax:
+
+.. code-block:: ada
+
+  pragma Program_Exit [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect ``Program_Exit``
+in the SPARK 2014 Reference Manual, section 6.1.10.
 
 Pragma Propagate_Exceptions
 ===========================

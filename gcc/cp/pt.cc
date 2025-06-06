@@ -14983,6 +14983,8 @@ tsubst_function_decl (tree t, tree args, tsubst_flags_t complain,
   if (closure && DECL_IOBJ_MEMBER_FUNCTION_P (t))
     parms = DECL_CHAIN (parms);
   parms = tsubst (parms, args, complain, t);
+  if (parms == error_mark_node)
+    return error_mark_node;
   for (tree parm = parms; parm; parm = DECL_CHAIN (parm))
     DECL_CONTEXT (parm) = r;
   if (closure && DECL_IOBJ_MEMBER_FUNCTION_P (t))
@@ -15555,6 +15557,9 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain,
               /* We're dealing with a normal parameter.  */
               type = tsubst (TREE_TYPE (t), args, complain, in_decl);
 
+	    if (type == error_mark_node && !(complain & tf_error))
+	      RETURN (error_mark_node);
+
             type = type_decays_to (type);
             TREE_TYPE (r) = type;
             cp_apply_type_quals_to_decl (cp_type_quals (type), r);
@@ -15592,8 +15597,13 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain,
 	/* If cp_unevaluated_operand is set, we're just looking for a
 	   single dummy parameter, so don't keep going.  */
 	if (DECL_CHAIN (t) && !cp_unevaluated_operand)
-	  DECL_CHAIN (r) = tsubst (DECL_CHAIN (t), args,
-				   complain, DECL_CHAIN (t));
+	  {
+	    tree chain = tsubst (DECL_CHAIN (t), args,
+				 complain, DECL_CHAIN (t));
+	    if (chain == error_mark_node)
+	      RETURN (error_mark_node);
+	    DECL_CHAIN (r) = chain;
+	  }
 
         /* FIRST_R contains the start of the chain we've built.  */
         r = first_r;
@@ -15989,7 +15999,10 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain,
 		  = remove_attribute ("visibility", DECL_ATTRIBUTES (r));
 	      }
 	    determine_visibility (r);
-	    if ((!local_p || TREE_STATIC (t)) && DECL_SECTION_NAME (t))
+	    if ((!local_p || TREE_STATIC (t))
+		&& !(flag_openmp && DECL_LANG_SPECIFIC (t)
+		     && DECL_OMP_DECLARE_MAPPER_P (t))
+		&& DECL_SECTION_NAME (t))
 	      set_decl_section_name (r, t);
 	  }
 
@@ -16040,6 +16053,13 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain,
 		&& dependent_type_p (TREE_TYPE (r)))
 	      SET_TYPE_STRUCTURAL_EQUALITY (TREE_TYPE (r));
 	  }
+
+	if (flag_openmp
+	    && VAR_P (t)
+	    && DECL_LANG_SPECIFIC (t)
+	    && DECL_OMP_DECLARE_MAPPER_P (t)
+	    && strchr (IDENTIFIER_POINTER (DECL_NAME (t)), '~') == NULL)
+	  DECL_NAME (r) = omp_mapper_id (DECL_NAME (t), TREE_TYPE (r));
 
 	layout_decl (r, 0);
       }
@@ -18313,8 +18333,10 @@ tsubst_omp_clauses (tree clauses, enum c_omp_region_type ort,
     }
 
   new_clauses = nreverse (new_clauses);
-  if (ort != C_ORT_OMP_DECLARE_SIMD)
+  if (ort != C_ORT_OMP_DECLARE_SIMD && ort != C_ORT_OMP_DECLARE_MAPPER)
     {
+      if (ort == C_ORT_OMP_TARGET)
+	new_clauses = c_omp_instantiate_mappers (new_clauses);
       new_clauses = finish_omp_clauses (new_clauses, ort);
       if (linear_no_step)
 	for (nc = new_clauses; nc; nc = OMP_CLAUSE_CHAIN (nc))
@@ -18368,7 +18390,9 @@ tsubst_omp_context_selector (tree ctx, tree args, tsubst_flags_t complain,
 		}
 	    }
 
-	  switch (omp_ts_map[OMP_TS_CODE (sel)].tp_type)
+	  enum omp_tp_type property_kind
+	    = omp_ts_map[OMP_TS_CODE (sel)].tp_type;
+	  switch (property_kind)
 	      {
 	      case OMP_TRAIT_PROPERTY_DEV_NUM_EXPR:
 	      case OMP_TRAIT_PROPERTY_BOOL_EXPR:
@@ -18376,12 +18400,26 @@ tsubst_omp_context_selector (tree ctx, tree args, tsubst_flags_t complain,
 				 args, complain, in_decl);
 		t = fold_non_dependent_expr (t);
 		if (!value_dependent_expression_p (t)
-		    && !type_dependent_expression_p (t)
-		    && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
-		  error_at (cp_expr_loc_or_input_loc (t),
-			    "property must be integer expression");
-		else
-		  properties = make_trait_property (NULL_TREE, t, NULL_TREE);
+		    && !type_dependent_expression_p (t))
+		  {
+		    if (property_kind == OMP_TRAIT_PROPERTY_BOOL_EXPR)
+		      t = maybe_convert_cond (t);
+		    else
+		      {
+			t = convert_from_reference (t);
+			if (!INTEGRAL_TYPE_P (TREE_TYPE (t)))
+			  {
+			    error_at (cp_expr_loc_or_input_loc (t),
+				      "property must be integer expression");
+			    t = error_mark_node;
+			  }
+		      }
+		  }
+		if (t != error_mark_node
+		    && !processing_template_decl
+		    && TREE_CODE (t) != CLEANUP_POINT_EXPR)
+		  t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+		properties = make_trait_property (NULL_TREE, t, NULL_TREE);
 		break;
 	      case OMP_TRAIT_PROPERTY_CLAUSE_LIST:
 		if (OMP_TS_CODE (sel) == OMP_TRAIT_CONSTRUCT_SIMD)
@@ -20034,6 +20072,22 @@ tsubst_stmt (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 	break;
       }
 
+    case OMP_DECLARE_MAPPER:
+      {
+	t = copy_node (t);
+
+	tree decl = OMP_DECLARE_MAPPER_DECL (t);
+	decl = tsubst (decl, args, complain, in_decl);
+	tree type = tsubst (TREE_TYPE (t), args, complain, in_decl);
+	tree clauses = OMP_DECLARE_MAPPER_CLAUSES (t);
+	clauses = tsubst_omp_clauses (clauses, C_ORT_OMP_DECLARE_MAPPER, args,
+				      complain, in_decl);
+	TREE_TYPE (t) = type;
+	OMP_DECLARE_MAPPER_DECL (t) = decl;
+	OMP_DECLARE_MAPPER_CLAUSES (t) = clauses;
+	RETURN (t);
+      }
+
     case TRANSACTION_EXPR:
       {
 	int flags = 0;
@@ -21091,6 +21145,23 @@ tsubst_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 	      RETURN (error_mark_node);
 	  }
 	RETURN (build_omp_array_section (EXPR_LOCATION (t), op0, op1, op2));
+      }
+
+    case OMP_DECLARE_MAPPER:
+      {
+	t = copy_node (t);
+
+	tree decl = OMP_DECLARE_MAPPER_DECL (t);
+	DECL_OMP_DECLARE_MAPPER_P (decl) = 1;
+	decl = tsubst (decl, args, complain, in_decl);
+	tree type = tsubst (TREE_TYPE (t), args, complain, in_decl);
+	tree clauses = OMP_DECLARE_MAPPER_CLAUSES (t);
+	clauses = tsubst_omp_clauses (clauses, C_ORT_OMP_DECLARE_MAPPER, args,
+				      complain, in_decl);
+	TREE_TYPE (t) = type;
+	OMP_DECLARE_MAPPER_DECL (t) = decl;
+	OMP_DECLARE_MAPPER_CLAUSES (t) = clauses;
+	RETURN (t);
       }
 
     case SIZEOF_EXPR:
@@ -28036,7 +28107,9 @@ instantiate_decl (tree d, bool defer_ok, bool expl_inst_class_mem_p)
       || (external_p && VAR_P (d))
       /* Handle here a deleted function too, avoid generating
 	 its body (c++/61080).  */
-      || deleted_p)
+      || deleted_p
+      /* We need the initializer for an OpenMP declare mapper.  */
+      || (VAR_P (d) && DECL_LANG_SPECIFIC (d) && DECL_OMP_DECLARE_MAPPER_P (d)))
     {
       /* The definition of the static data member is now required so
 	 we must substitute the initializer.  */

@@ -461,6 +461,19 @@ gomp_copy_dev2host (struct gomp_device_descr *devicep,
     gomp_device_copy (devicep, devicep->dev2host_func, "host", h, "dev", d, sz);
 }
 
+attribute_hidden void
+gomp_copy_dev2dev (struct gomp_device_descr *devicep,
+		   struct goacc_asyncqueue *aq,
+		   void *dst, const void *src, size_t sz)
+{
+  if (__builtin_expect (aq != NULL, 0))
+    goacc_device_copy_async (devicep, devicep->openacc.async.dev2dev_func,
+			     "dev", dst, "dev", src, NULL, sz, aq);
+  else
+    gomp_device_copy (devicep, devicep->dev2dev_func, "dev", dst,
+		      "dev", src, sz);
+}
+
 static void
 gomp_free_device_memory (struct gomp_device_descr *devicep, void *devptr)
 {
@@ -4990,6 +5003,88 @@ omp_target_memcpy_rect_async (void *dst, const void *src, size_t element_size,
   return 0;
 }
 
+static void
+omp_target_memset_int (void *ptr, int val, size_t count,
+		       struct gomp_device_descr *devicep)
+{
+  if (__builtin_expect (count == 0, 0))
+    return;
+  if (devicep == NULL)
+    {
+      memset (ptr, val, count);
+      return;
+    }
+
+  gomp_mutex_lock (&devicep->lock);
+  int ret = devicep->memset_func (devicep->target_id, ptr, val, count);
+  gomp_mutex_unlock (&devicep->lock);
+  if (!ret)
+    gomp_fatal ("omp_target_memset failed");
+}
+
+void*
+omp_target_memset (void *ptr, int val, size_t count, int device_num)
+{
+  struct gomp_device_descr *devicep;
+  if (device_num == omp_initial_device
+      || device_num == gomp_get_num_devices ()
+      || (devicep = resolve_device (device_num, false)) == NULL
+      || !(devicep->capabilities & GOMP_OFFLOAD_CAP_OPENMP_400)
+      || devicep->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    devicep = NULL;
+
+  omp_target_memset_int (ptr, val, count, devicep);
+  return ptr;
+}
+
+typedef struct
+{
+  void *ptr;
+  size_t count;
+  struct gomp_device_descr *devicep;
+  int val;
+} omp_target_memset_data;
+
+static void
+omp_target_memset_async_helper (void *args)
+{
+  omp_target_memset_data *a = args;
+  omp_target_memset_int (a->ptr, a->val, a->count, a->devicep);
+}
+
+void*
+omp_target_memset_async (void *ptr, int val, size_t count, int device_num,
+			 int depobj_count, omp_depend_t *depobj_list)
+{
+  void *depend[depobj_count + 5];
+  struct gomp_device_descr *devicep;
+  unsigned flags = 0;
+  int i;
+
+  if (device_num == omp_initial_device
+      || device_num == gomp_get_num_devices ()
+      || (devicep = resolve_device (device_num, false)) == NULL
+      || !(devicep->capabilities & GOMP_OFFLOAD_CAP_OPENMP_400)
+      || devicep->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    devicep = NULL;
+
+  omp_target_memset_data s = {.ptr = ptr, .val = val, .count = count,
+			      .devicep = devicep};
+  if (depobj_count > 0 && depobj_list != NULL)
+    {
+      flags |= GOMP_TASK_FLAG_DEPEND;
+      depend[0] = 0;
+      depend[1] = (void *) (uintptr_t) depobj_count;
+      depend[2] = depend[3] = depend[4] = 0;
+      for (i = 0; i < depobj_count; ++i)
+	depend[i + 5] = &depobj_list[i];
+    }
+
+  GOMP_task (omp_target_memset_async_helper, &s, NULL, sizeof (s),
+	     __alignof__ (s), true, flags, depend, 0, NULL);
+  return ptr;
+}
+
 int
 omp_target_associate_ptr (const void *host_ptr, const void *device_ptr,
 			  size_t size, size_t device_offset, int device_num)
@@ -5555,6 +5650,7 @@ gomp_load_plugin_for_device (struct gomp_device_descr *device,
       DLSYM_OPT (async_run, async_run);
       DLSYM_OPT (can_run, can_run);
       DLSYM (dev2dev);
+      DLSYM (memset);
     }
   if (device->capabilities & GOMP_OFFLOAD_CAP_OPENACC_200)
     {
@@ -5573,6 +5669,7 @@ gomp_load_plugin_for_device (struct gomp_device_descr *device,
 	  || !DLSYM_OPT (openacc.async.exec, openacc_async_exec)
 	  || !DLSYM_OPT (openacc.async.dev2host, openacc_async_dev2host)
 	  || !DLSYM_OPT (openacc.async.host2dev, openacc_async_host2dev)
+	  || !DLSYM_OPT (openacc.async.dev2dev, openacc_async_dev2dev)
 	  || !DLSYM_OPT (openacc.get_property, openacc_get_property))
 	{
 	  /* Require all the OpenACC handlers if we have

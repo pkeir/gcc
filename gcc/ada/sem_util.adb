@@ -3025,7 +3025,7 @@ package body Sem_Util is
 
                --  For an array aggregate, a discrete_choice_list that has
                --  a nonstatic range is considered as two or more separate
-               --  occurrences of the expression (RM 6.4.1(20/3)).
+               --  occurrences of the expression (RM 6.4.1(6.20/3)).
 
                elsif Is_Array_Type (Etype (N))
                  and then Nkind (N) = N_Aggregate
@@ -3110,48 +3110,105 @@ package body Sem_Util is
                   end loop;
                end if;
 
-               --  Handle discrete associations
+               --  Handle named associations
 
                if Present (Component_Associations (N)) then
                   Assoc := First (Component_Associations (N));
                   while Present (Assoc) loop
 
-                     if not Box_Present (Assoc) then
-                        Choice := First (Choices (Assoc));
-                        while Present (Choice) loop
+                     Handle_Association : declare
 
-                           --  For now we skip discriminants since it requires
-                           --  performing the analysis in two phases: first one
-                           --  analyzing discriminants and second one analyzing
-                           --  the rest of components since discriminants are
-                           --  evaluated prior to components: too much extra
-                           --  work to detect a corner case???
+                        procedure Collect_Expression_Ids (Expr : Node_Id);
+                        --  Collect identifiers in association expression Expr
 
-                           if Nkind (Choice) in N_Has_Entity
-                             and then Present (Entity (Choice))
-                             and then Ekind (Entity (Choice)) = E_Discriminant
-                           then
-                              null;
+                        procedure Handle_Association_Choices
+                          (Choices : List_Id; Expr : Node_Id);
+                        --  Collect identifiers in an association expression
+                        --  Expr for each choice in Choices.
 
-                           elsif Box_Present (Assoc) then
-                              null;
+                        ----------------------------
+                        -- Collect_Expression_Ids --
+                        ----------------------------
 
+                        procedure Collect_Expression_Ids (Expr : Node_Id) is
+                           Comp_Expr : Node_Id;
+
+                        begin
+                           if not Analyzed (Expr) then
+                              Comp_Expr := New_Copy_Tree (Expr);
+                              Set_Parent (Comp_Expr, Parent (N));
+                              Preanalyze_Without_Errors (Comp_Expr);
                            else
-                              if not Analyzed (Expression (Assoc)) then
-                                 Comp_Expr :=
-                                   New_Copy_Tree (Expression (Assoc));
-                                 Set_Parent (Comp_Expr, Parent (N));
-                                 Preanalyze_Without_Errors (Comp_Expr);
-                              else
-                                 Comp_Expr := Expression (Assoc);
-                              end if;
-
-                              Collect_Identifiers (Comp_Expr);
+                              Comp_Expr := Expr;
                            end if;
 
-                           Next (Choice);
-                        end loop;
-                     end if;
+                           Collect_Identifiers (Comp_Expr);
+                        end Collect_Expression_Ids;
+
+                        --------------------------------
+                        -- Handle_Association_Choices --
+                        --------------------------------
+
+                        procedure Handle_Association_Choices
+                          (Choices : List_Id; Expr : Node_Id)
+                        is
+                           Choice : Node_Id := First (Choices);
+
+                        begin
+                           while Present (Choice) loop
+
+                              --  For now skip discriminants since it requires
+                              --  performing analysis in two phases: first one
+                              --  analyzing discriminants and second analyzing
+                              --  the rest of components since discriminants
+                              --  are evaluated prior to components: too much
+                              --  extra work to detect a corner case???
+
+                              if Nkind (Choice) in N_Has_Entity
+                                and then Present (Entity (Choice))
+                                and then
+                                  Ekind (Entity (Choice)) = E_Discriminant
+                              then
+                                 null;
+
+                              else
+                                 Collect_Expression_Ids (Expr);
+                              end if;
+
+                              Next (Choice);
+                           end loop;
+                        end Handle_Association_Choices;
+
+                     begin
+                        if not Box_Present (Assoc) then
+                           if Nkind (Assoc) = N_Component_Association then
+                              Handle_Association_Choices
+                                (Choices (Assoc), Expression (Assoc));
+
+                           elsif
+                             Nkind (Assoc) = N_Iterated_Component_Association
+                               and then Present (Defining_Identifier (Assoc))
+                           then
+                              Handle_Association_Choices
+                                (Discrete_Choices (Assoc), Expression (Assoc));
+
+                           --  Nkind (Assoc) = N_Iterated_Component_Association
+                           --    with iterator_specification, or
+                           --  Nkind (Assoc) = N_Iterated_Element_Association
+                           --    with loop_parameter_specification
+                           --      or iterator_specification
+                           --
+                           --  It seems that we might also need to deal with
+                           --  iterable/iterator_names and iterator_filters
+                           --  within iterator_specifications, and range bounds
+                           --  within loop_parameter_specifications, but the
+                           --  utility of doing that seems very low. ???
+
+                           else
+                              Collect_Expression_Ids (Expression (Assoc));
+                           end if;
+                        end if;
+                     end Handle_Association;
 
                      Next (Assoc);
                   end loop;
@@ -5619,10 +5676,8 @@ package body Sem_Util is
          --  to start scanning from the incomplete view, which is earlier on
          --  the entity chain.
 
-         elsif Nkind (Parent (B_Type)) = N_Full_Type_Declaration
-           and then Present (Incomplete_View (Parent (B_Type)))
-         then
-            Id := Incomplete_View (Parent (B_Type));
+         elsif Present (Incomplete_View (B_Type)) then
+            Id := Incomplete_View (B_Type);
 
             --  If T is a derived from a type with an incomplete view declared
             --  elsewhere, that incomplete view is irrelevant, we want the
@@ -5662,6 +5717,7 @@ package body Sem_Util is
                          or else Is_Primitive (Id))
               and then Parent_Kind (Parent (Id))
                                     not in N_Formal_Subprogram_Declaration
+              and then not Is_Child_Unit (Id)
             then
                Is_Prim := False;
 
@@ -6577,6 +6633,30 @@ package body Sem_Util is
    begin
       return Is_Class_Wide_Type (Typ) or else Needs_Finalization (Typ);
    end CW_Or_Needs_Finalization;
+
+   -------------------------
+   -- Default_Constructor --
+   -------------------------
+
+   function Default_Constructor (Typ : Entity_Id) return Entity_Id is
+      Construct : Elmt_Id;
+   begin
+      pragma Assert (Is_Type (Typ));
+      if No (Constructor_Name (Typ)) or else No (Constructor_List (Typ)) then
+         return Empty;
+      end if;
+
+      Construct := First_Elmt (Constructor_List (Typ));
+      while Present (Construct) loop
+         if Parameter_Count (Elists.Node (Construct)) = 1 then
+            return Elists.Node (Construct);
+         end if;
+
+         Next_Elmt (Construct);
+      end loop;
+
+      return Empty;
+   end Default_Constructor;
 
    ---------------------
    -- Defining_Entity --
@@ -8063,12 +8143,20 @@ package body Sem_Util is
          loop
             Ren := Renamed_Object (Id);
 
+            --  The reference renames a function result. Check the original
+            --  node in case expansion relocates the function call.
+
+            --    Ren : ... renames Func_Call;
+
+            if Nkind (Original_Node (Ren)) = N_Function_Call then
+               exit;
+
             --  The reference renames an abstract state or a whole object
 
             --    Obj : ...;
             --    Ren : ... renames Obj;
 
-            if Is_Entity_Name (Ren) then
+            elsif Is_Entity_Name (Ren) then
 
                --  Do not follow a renaming that goes through a generic formal,
                --  because these entities are hidden and must not be referenced
@@ -8080,14 +8168,6 @@ package body Sem_Util is
                else
                   Id := Entity (Ren);
                end if;
-
-            --  The reference renames a function result. Check the original
-            --  node in case expansion relocates the function call.
-
-            --    Ren : ... renames Func_Call;
-
-            elsif Nkind (Original_Node (Ren)) = N_Function_Call then
-               exit;
 
             --  Otherwise the reference renames something which does not yield
             --  an abstract state or a whole object. Treat the reference as not
@@ -12368,8 +12448,13 @@ package body Sem_Util is
 
       while Present (Node) loop
          case Nkind (Node) is
-            when N_Null_Statement | N_Call_Marker | N_Raise_xxx_Error =>
+            when N_Null_Statement | N_Call_Marker =>
                null;
+
+            when N_Raise_xxx_Error =>
+               if Comes_From_Source (Node) then
+                  return False;
+               end if;
 
             when N_Object_Declaration =>
                if Present (Expression (Node))
@@ -17815,6 +17900,27 @@ package body Sem_Util is
       return Nkind (Spec_Decl) in N_Generic_Declaration;
    end Is_Generic_Declaration_Or_Body;
 
+   --------------------------
+   -- Is_In_Context_Clause --
+   --------------------------
+
+   function Is_In_Context_Clause (N : Node_Id) return Boolean is
+      Plist       : List_Id;
+      Parent_Node : Node_Id;
+
+   begin
+      if Is_List_Member (N) then
+         Plist := List_Containing (N);
+         Parent_Node := Parent (Plist);
+
+         return Present (Parent_Node)
+           and then Nkind (Parent_Node) = N_Compilation_Unit
+           and then Context_Items (Parent_Node) = Plist;
+      end if;
+
+      return False;
+   end Is_In_Context_Clause;
+
    ---------------------------
    -- Is_Independent_Object --
    ---------------------------
@@ -20863,6 +20969,7 @@ package body Sem_Util is
         or else Nam = Name_Pre
         or else Nam = Name_Pre_Class
         or else Nam = Name_Precondition
+        or else Nam = Name_Program_Exit
         or else Nam = Name_Refined_Depends
         or else Nam = Name_Refined_Global
         or else Nam = Name_Refined_Post
@@ -21875,20 +21982,6 @@ package body Sem_Util is
          end if;
       end loop Scope_Loop;
    end Kill_Current_Values;
-
-   --------------------------
-   -- Kill_Size_Check_Code --
-   --------------------------
-
-   procedure Kill_Size_Check_Code (E : Entity_Id) is
-   begin
-      if (Ekind (E) = E_Constant or else Ekind (E) = E_Variable)
-        and then Present (Size_Check_Code (E))
-      then
-         Remove (Size_Check_Code (E));
-         Set_Size_Check_Code (E, Empty);
-      end if;
-   end Kill_Size_Check_Code;
 
    --------------------
    -- Known_Non_Null --
@@ -25336,6 +25429,8 @@ package body Sem_Util is
                end if;
 
                if Nkind (P) = N_Selected_Component
+               --  and then Ekind (Entity (Selector_Name (P)))
+               --             in Record_Field_Kind
                  and then Present (Entry_Formal (Entity (Selector_Name (P))))
                then
                   --  Case of a reference to an entry formal
@@ -26065,6 +26160,24 @@ package body Sem_Util is
 
       return Empty;
    end Param_Entity;
+
+   ---------------------
+   -- Parameter_Count --
+   ---------------------
+
+   function Parameter_Count (Subp : Entity_Id) return Nat is
+      Result : Nat := 0;
+      Param  : Entity_Id;
+   begin
+      Param := First_Entity (Subp);
+      while Present (Param) loop
+         Result := Result + 1;
+
+         Param := Next_Entity (Param);
+      end loop;
+
+      return Result;
+   end Parameter_Count;
 
    ----------------------
    -- Policy_In_Effect --

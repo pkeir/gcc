@@ -2975,7 +2975,10 @@ struct GTY(()) lang_decl_base {
 
   unsigned module_keyed_decls_p : 1;	   /* has keys, applies to all decls */
 
-  /* 11 spare bits.  */
+  /* VAR_DECL being used to represent an OpenMP declared mapper.  */
+  unsigned omp_declare_mapper_p : 1;
+
+  /* 10 spare bits.  */
 };
 
 /* True for DECL codes which have template info and access.  */
@@ -4530,6 +4533,11 @@ get_vec_init_expr (tree t)
 #define DECL_OMP_DECLARE_REDUCTION_P(NODE) \
   (LANG_DECL_FN_CHECK (DECL_COMMON_CHECK (NODE))->omp_declare_reduction_p)
 
+/* Nonzero if NODE is an artificial FUNCTION_DECL for
+   #pragma omp declare mapper.  */
+#define DECL_OMP_DECLARE_MAPPER_P(NODE) \
+  (DECL_LANG_SPECIFIC (VAR_DECL_CHECK (NODE))->u.base.omp_declare_mapper_p)
+
 /* Nonzero if DECL has been declared threadprivate by
    #pragma omp threadprivate.  */
 #define CP_DECL_THREADPRIVATE_P(DECL) \
@@ -5521,6 +5529,10 @@ decl_template_parm_check (const_tree t, const char *f, int l, const char *fn)
    back to the original (ramp) function.  */
 #define DECL_RAMP_FN(NODE) \
   (coro_get_ramp_function (NODE))
+
+/* For a FUNCTION_DECL this is true if it is a coroutine ramp.  */
+#define DECL_RAMP_P(NODE) \
+  DECL_COROUTINE_P (NODE) && !DECL_RAMP_FN (NODE)
 
 /* True for an OMP_ATOMIC that has dependent parameters.  These are stored
    as an expr in operand 1, and integer_zero_node or clauses in operand 0.  */
@@ -7944,6 +7956,7 @@ extern bool perform_deferred_access_checks	(tsubst_flags_t);
 extern bool perform_or_defer_access_check	(tree, tree, tree,
 						 tsubst_flags_t,
 						 access_failure_info *afi = NULL);
+extern tree maybe_convert_cond (tree);
 
 /* RAII sentinel to ensures that deferred access checks are popped before
   a function returns.  */
@@ -8092,11 +8105,14 @@ extern tree finish_qualified_id_expr		(tree, tree, bool, bool,
 extern void simplify_aggr_init_expr		(tree *);
 extern void finalize_nrv			(tree, tree);
 extern tree omp_reduction_id			(enum tree_code, tree, tree);
+extern tree omp_mapper_id			(tree, tree);
 extern tree cp_remove_omp_priv_cleanup_stmt	(tree *, int *, void *);
 extern bool cp_check_omp_declare_reduction	(tree);
+extern bool cp_check_omp_declare_mapper		(tree);
 extern void finish_omp_declare_simd_methods	(tree);
 extern tree cp_finish_omp_init_prefer_type	(tree);
 extern tree finish_omp_clauses			(tree, enum c_omp_region_type);
+extern tree omp_instantiate_mappers		(tree);
 extern tree push_omp_privatization_clauses	(bool);
 extern void pop_omp_privatization_clauses	(tree);
 extern void save_omp_privatization_clauses	(vec<tree> &);
@@ -8692,6 +8708,10 @@ extern tree cxx_omp_clause_copy_ctor		(tree, tree, tree);
 extern tree cxx_omp_clause_assign_op		(tree, tree, tree);
 extern tree cxx_omp_clause_dtor			(tree, tree);
 extern void cxx_omp_finish_clause		(tree, gimple_seq *, bool);
+extern tree cxx_omp_finish_mapper_clauses	(tree);
+extern tree cxx_omp_mapper_lookup		(tree, tree);
+extern tree cxx_omp_extract_mapper_directive	(tree);
+extern tree cxx_omp_map_array_section		(location_t, tree);
 extern bool cxx_omp_privatize_by_reference	(const_tree);
 extern bool cxx_omp_disregard_value_expr	(tree, bool);
 extern void cp_fold_function			(tree);

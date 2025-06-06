@@ -320,6 +320,7 @@ package body Inline is
    --    Exit_Cases
    --    Postcondition
    --    Precondition
+   --    Program_Exit
    --    Refined_Global
    --    Refined_Depends
    --    Refined_Post
@@ -4077,6 +4078,7 @@ package body Inline is
             --  Replace call with temporary and create its declaration
 
             Temp := Make_Temporary (Loc, 'C');
+            Mutate_Ekind (Temp, E_Constant);
             Set_Is_Internal (Temp);
 
             --  For the unconstrained case, the generated temporary has the
@@ -5271,6 +5273,7 @@ package body Inline is
                                         | Name_Exit_Cases
                                         | Name_Postcondition
                                         | Name_Precondition
+                                        | Name_Program_Exit
                                         | Name_Refined_Global
                                         | Name_Refined_Depends
                                         | Name_Refined_Post

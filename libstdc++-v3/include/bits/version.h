@@ -1499,7 +1499,7 @@
 #undef __glibcxx_want_move_iterator_concept
 
 #if !defined(__cpp_lib_semaphore)
-# if (__cplusplus >= 202002L) && _GLIBCXX_HOSTED && (__glibcxx_atomic_wait || _GLIBCXX_HAVE_POSIX_SEMAPHORE)
+# if (__cplusplus >= 202002L) && _GLIBCXX_HOSTED && (__glibcxx_atomic_wait)
 #  define __glibcxx_semaphore 201907L
 #  if defined(__glibcxx_want_all) || defined(__glibcxx_want_semaphore)
 #   define __cpp_lib_semaphore 201907L
@@ -1847,6 +1847,16 @@
 # endif
 #endif /* !defined(__cpp_lib_ranges_find_last) && defined(__glibcxx_want_ranges_find_last) */
 #undef __glibcxx_want_ranges_find_last
+
+#if !defined(__cpp_lib_ranges_starts_ends_with)
+# if (__cplusplus >= 202100L)
+#  define __glibcxx_ranges_starts_ends_with 202106L
+#  if defined(__glibcxx_want_all) || defined(__glibcxx_want_ranges_starts_ends_with)
+#   define __cpp_lib_ranges_starts_ends_with 202106L
+#  endif
+# endif
+#endif /* !defined(__cpp_lib_ranges_starts_ends_with) && defined(__glibcxx_want_ranges_starts_ends_with) */
+#undef __glibcxx_want_ranges_starts_ends_with
 
 #if !defined(__cpp_lib_constexpr_bitset)
 # if (__cplusplus >= 202100L) && _GLIBCXX_HOSTED && (__cpp_constexpr_dynamic_alloc)
@@ -2213,6 +2223,7 @@
 #endif /* !defined(__cpp_lib_indirect) && defined(__glibcxx_want_indirect) */
 #undef __glibcxx_want_indirect
 
+<<<<<<< HEAD
 #if !defined(__cpp_lib_smart_ptr_owner_equality)
 # if (__cplusplus >  202302L) && _GLIBCXX_HOSTED
 #  define __glibcxx_smart_ptr_owner_equality 202306L
@@ -2222,5 +2233,16 @@
 # endif
 #endif /* !defined(__cpp_lib_smart_ptr_owner_equality) && defined(__glibcxx_want_smart_ptr_owner_equality) */
 #undef __glibcxx_want_smart_ptr_owner_equality
+=======
+#if !defined(__cpp_lib_polymorphic)
+# if (__cplusplus >  202302L) && _GLIBCXX_HOSTED
+#  define __glibcxx_polymorphic 202502L
+#  if defined(__glibcxx_want_all) || defined(__glibcxx_want_polymorphic)
+#   define __cpp_lib_polymorphic 202502L
+#  endif
+# endif
+#endif /* !defined(__cpp_lib_polymorphic) && defined(__glibcxx_want_polymorphic) */
+#undef __glibcxx_want_polymorphic
+>>>>>>> master
 
 #undef __glibcxx_want_all

@@ -581,14 +581,19 @@ package body Sem_Ch6 is
             Set_Has_Completion (Def_Id, not Is_Ignored_Ghost_Entity (Def_Id));
             Push_Scope (Def_Id);
             Install_Formals (Def_Id);
-            Preanalyze_Spec_Expression (Expr, Typ);
+            Preanalyze_And_Resolve_Spec_Expression (Expr, Typ);
             End_Scope;
          else
             Push_Scope (Def_Id);
             Install_Formals (Def_Id);
-            Preanalyze_Spec_Expression (Expr, Typ);
+            Preanalyze_And_Resolve_Spec_Expression (Expr, Typ);
             Check_Limited_Return (Orig_N, Expr, Typ);
             End_Scope;
+         end if;
+
+         if Is_Incomplete_Type (Typ) then
+            Error_Msg_NE
+              ("premature usage of incomplete}", Expr, First_Subtype (Typ));
          end if;
 
          --  In the case of an expression function marked with the aspect
@@ -617,7 +622,7 @@ package body Sem_Ch6 is
                   begin
                      Set_Checking_Potentially_Static_Expression (True);
 
-                     Preanalyze_Spec_Expression (Exp_Copy, Typ);
+                     Preanalyze_And_Resolve_Spec_Expression (Exp_Copy, Typ);
 
                      if not Is_Static_Expression (Exp_Copy) then
                         Error_Msg_N
@@ -2270,6 +2275,23 @@ package body Sem_Ch6 is
       end if;
 
       Formal := First_Formal (Spec_Id);
+
+      --  The first parameter of a borrowing traversal function might be an IN
+      --  or an IN OUT parameter.
+
+      if Present (Formal)
+        and then Ekind (Etype (Spec_Id)) = E_Anonymous_Access_Type
+        and then not Is_Access_Constant (Etype (Spec_Id))
+      then
+         if Ekind (Formal) = E_Out_Parameter then
+            Error_Msg_Code := GEC_Out_Parameter_In_Function;
+            Error_Msg_N
+              ("first parameter of traversal function cannot have mode `OUT` "
+               & "in SPARK '[[]']", Formal);
+         end if;
+         Next_Formal (Formal);
+      end if;
+
       while Present (Formal) loop
          if Ekind (Spec_Id) in E_Function | E_Generic_Function
            and then not Is_Function_With_Side_Effects (Spec_Id)
@@ -4581,7 +4603,7 @@ package body Sem_Ch6 is
       Analyze_SPARK_Subprogram_Specification (Specification (N));
 
       --  A function with side effects shall not be an expression function
-      --  (SPARK RM 6.1.11(6)).
+      --  (SPARK RM 6.1.12(6)).
 
       if Present (Spec_Id)
         and then (Is_Expression_Function (Spec_Id)
@@ -4644,10 +4666,8 @@ package body Sem_Ch6 is
                --  an incomplete tagged type declaration, get the class-wide
                --  type of the incomplete tagged type to match Find_Type_Name.
 
-               if Nkind (Parent (Etyp)) = N_Full_Type_Declaration
-                 and then Present (Incomplete_View (Parent (Etyp)))
-               then
-                  Etyp := Class_Wide_Type (Incomplete_View (Parent (Etyp)));
+               if Present (Incomplete_View (Etype (Etyp))) then
+                  Etyp := Class_Wide_Type (Incomplete_View (Etype (Etyp)));
                end if;
 
                Set_Directly_Designated_Type (Etype (Spec_Id), Etyp);
@@ -5379,6 +5399,89 @@ package body Sem_Ch6 is
 
          End_Scope;
 
+         --  Register the subprogram in a Constructor_List when it is a valid
+         --  constructor.
+
+         if All_Extensions_Allowed
+           and then Present (First_Formal (Designator))
+         then
+
+            declare
+               First_Form_Type : constant Entity_Id :=
+                 Etype (First_Formal (Designator));
+
+               Construct : Elmt_Id;
+            begin
+               --  Valid constructors have a "controlling" formal of a type
+               --  with the Constructor aspect specified. Additionally, the
+               --  subprogram name must match value described by the aspect.
+
+               --  Additionally, constructor declarations must exist within the
+               --  same scope as the type declaration and before the type is
+               --  frozen.
+
+               --  For example:
+               --
+               --     type Foo is null record with Constructor => Bar;
+               --
+               --     procedure Bar (Self : in out Foo);
+               --
+
+               if Present (Constructor_Name (First_Form_Type))
+                 and then Current_Scope = Scope (First_Form_Type)
+                 and then Chars (Constructor_Name (First_Form_Type))
+                            = Chars (Designator)
+                 and then Ekind (Designator) = E_Procedure
+                 and then Nkind (Parent (N)) = N_Subprogram_Declaration
+               then
+                  --  If the constructor list is empty than we don't have to
+                  --  look for duplicates - we simply create the list and
+                  --  add it.
+
+                  if No (Constructor_List (First_Form_Type)) then
+                     Set_Constructor_List
+                       (First_Form_Type, New_Elmt_List (Designator));
+
+                  --  Otherwise, we need to check the constructor hasen't
+                  --  already been added (e.g. a specification and body) and
+                  --  that there isn't a constructor with the same number of
+                  --  type of formals.
+
+                  --  NOTE: The Constructor_List is sorted by the number of
+                  --  parameters.
+
+                  else
+                     Construct := First_Elmt
+                                    (Constructor_List (First_Form_Type));
+
+                     --  Skip over constructors with less than the number of
+                     --  parameters than Designator ???
+
+                     --  Loop through the constructors looking for ones which
+                     --  "match."
+
+                     Outter : loop
+
+                        --  When we are at the end of the constructor list we
+                        --  know there are no matches, so it is safe to add.
+
+                        if No (Construct) then
+                           Append_Elmt
+                             (Designator,
+                              Constructor_List (First_Form_Type));
+                           exit Outter;
+                        end if;
+
+                        --  Loop through the formals and check the formals
+                        --  match on type ???
+
+                        Next_Elmt (Construct);
+                     end loop Outter;
+                  end if;
+               end if;
+            end;
+         end if;
+
       --  The subprogram scope is pushed and popped around the processing of
       --  the return type for consistency with call above to Process_Formals
       --  (which itself can call Analyze_Return_Type), and to ensure that any
@@ -6094,7 +6197,7 @@ package body Sem_Ch6 is
 
                      if NewD then
                         Push_Scope (New_Id);
-                        Preanalyze_Spec_Expression
+                        Preanalyze_And_Resolve_Spec_Expression
                           (Default_Value (New_Formal), Etype (New_Formal));
                         End_Scope;
                      end if;
@@ -6517,7 +6620,7 @@ package body Sem_Ch6 is
                --  expanded, so expand now to check conformance.
 
                if NewD then
-                  Preanalyze_Spec_Expression
+                  Preanalyze_And_Resolve_Spec_Expression
                     (Expression (New_Discr), New_Discr_Type);
                end if;
 
@@ -13207,7 +13310,7 @@ package body Sem_Ch6 is
             --  Do the special preanalysis of the expression (see section on
             --  "Handling of Default Expressions" in the spec of package Sem).
 
-            Preanalyze_Spec_Expression (Default, Formal_Type);
+            Preanalyze_And_Resolve_Spec_Expression (Default, Formal_Type);
 
             --  An access to constant cannot be the default for
             --  an access parameter that is an access to variable.

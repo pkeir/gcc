@@ -41,7 +41,6 @@ with Exp_Disp;       use Exp_Disp;
 with Exp_Dist;       use Exp_Dist;
 with Exp_Tss;        use Exp_Tss;
 with Exp_Util;       use Exp_Util;
-with Expander;       use Expander;
 with Fmap;
 with Freeze;         use Freeze;
 with Ghost;          use Ghost;
@@ -623,9 +622,11 @@ package body Sem_Ch3 is
    --  Create a new ordinary fixed point type, and apply the constraint to
    --  obtain subtype of it.
 
-   procedure Preanalyze_Default_Expression (N : Node_Id; T : Entity_Id);
-   --  Wrapper on Preanalyze_Spec_Expression for default expressions, so that
-   --  In_Default_Expr can be properly adjusted.
+   procedure Preanalyze_And_Resolve_Default_Expression
+     (N : Node_Id;
+      T : Entity_Id);
+   --  Wrapper on Preanalyze_And_Resolve_Spec_Expression for default
+   --  expressions, so that In_Default_Expr can be properly adjusted.
 
    procedure Prepare_Private_Subtype_Completion
      (Id          : Entity_Id;
@@ -1306,14 +1307,6 @@ package body Sem_Ch3 is
       Set_Etype                    (T_Name, T_Name);
       Reinit_Size_Align            (T_Name);
       Set_Directly_Designated_Type (T_Name, Desig_Type);
-
-      --  If the access_to_subprogram is not declared at the library level,
-      --  it can only point to subprograms that are at the same or deeper
-      --  accessibility level. The corresponding subprogram type might
-      --  require an activation record when compiling for C.
-
-      Set_Needs_Activation_Record  (Desig_Type,
-                                      not Is_Library_Level_Entity (T_Name));
 
       Generate_Reference_To_Formals (T_Name);
 
@@ -2110,7 +2103,7 @@ package body Sem_Ch3 is
       --  package Sem).
 
       if Present (E) then
-         Preanalyze_Default_Expression (E, T);
+         Preanalyze_And_Resolve_Default_Expression (E, T);
          Check_Initialization (T, E);
 
          if Ada_Version >= Ada_2005
@@ -2507,7 +2500,8 @@ package body Sem_Ch3 is
                            (First (Pragma_Argument_Associations (ASN))));
                      Set_Parent (Exp, ASN);
 
-                     Preanalyze_Assert_Expression (Exp, Standard_Boolean);
+                     Preanalyze_And_Resolve_Assert_Expression
+                       (Exp, Standard_Boolean);
                   end if;
 
                   ASN := Next_Pragma (ASN);
@@ -3200,7 +3194,7 @@ package body Sem_Ch3 is
         and then Present (Full_View (Prev))
       then
          T := Full_View (Prev);
-         Set_Incomplete_View (N, Prev);
+         Set_Incomplete_View (T, Prev);
       else
          T := Prev;
       end if;
@@ -3550,6 +3544,13 @@ package body Sem_Ch3 is
                end loop;
             end;
          end if;
+      end if;
+
+      if Ekind (T) = E_Record_Type
+        and then Is_Large_Unconstrained_Definite (T)
+        and then not Is_Limited_Type (T)
+      then
+         Error_Msg_N ("??creation of & object may raise Storage_Error!", T);
       end if;
    end Analyze_Full_Type_Declaration;
 
@@ -4991,7 +4992,7 @@ package body Sem_Ch3 is
 
             if Is_Array_Type (T)
               and then No_Initialization (N)
-              and then Nkind (Original_Node (E)) = N_Aggregate
+              and then Nkind (Unqualify (Original_Node (E))) = N_Aggregate
             then
                Act_T := Etype (E);
 
@@ -5137,10 +5138,7 @@ package body Sem_Ch3 is
 
       elsif Is_Array_Type (T)
         and then No_Initialization (N)
-        and then (Nkind (Original_Node (E)) = N_Aggregate
-                   or else (Nkind (Original_Node (E)) = N_Qualified_Expression
-                             and then Nkind (Original_Node (Expression
-                                        (Original_Node (E)))) = N_Aggregate))
+        and then Nkind (Unqualify (Original_Node (E))) = N_Aggregate
       then
          if not Is_Entity_Name (Object_Definition (N)) then
             Act_T := Etype (E);
@@ -6633,8 +6631,6 @@ package body Sem_Ch3 is
          end;
       end if;
 
-      --  Constrained array case
-
       if No (T) then
          --  We might be creating more than one itype with the same Related_Id,
          --  e.g. for an array object definition and its initial value. Give
@@ -6643,6 +6639,8 @@ package body Sem_Ch3 is
 
          T := Create_Itype (E_Void, P, Related_Id, 'T', Suffix_Index => -1);
       end if;
+
+      --  Constrained array case
 
       if Nkind (Def) = N_Constrained_Array_Definition then
          Index := First (Discrete_Subtype_Definitions (Def));
@@ -11985,7 +11983,7 @@ package body Sem_Ch3 is
             Insert_Before (Typ_Decl, Decl);
             Analyze (Decl);
             Set_Full_View (Inc_T, Typ);
-            Set_Incomplete_View (Typ_Decl, Inc_T);
+            Set_Incomplete_View (Typ, Inc_T);
 
             --  If the type is tagged, create a common class-wide type for
             --  both views, and set the Etype of the class-wide type to the
@@ -20857,67 +20855,71 @@ package body Sem_Ch3 is
       Set_Is_Constrained     (T);
    end Ordinary_Fixed_Point_Type_Declaration;
 
-   ----------------------------------
-   -- Preanalyze_Assert_Expression --
-   ----------------------------------
+   ----------------------------------------------
+   -- Preanalyze_And_Resolve_Assert_Expression --
+   ----------------------------------------------
 
-   procedure Preanalyze_Assert_Expression (N : Node_Id; T : Entity_Id) is
+   procedure Preanalyze_And_Resolve_Assert_Expression
+     (N : Node_Id;
+      T : Entity_Id) is
    begin
       In_Assertion_Expr := In_Assertion_Expr + 1;
-      Preanalyze_Spec_Expression (N, T);
+      Preanalyze_And_Resolve_Spec_Expression (N, T);
       In_Assertion_Expr := In_Assertion_Expr - 1;
-   end Preanalyze_Assert_Expression;
+   end Preanalyze_And_Resolve_Assert_Expression;
 
-   --  ??? The variant below explicitly saves and restores all the flags,
-   --  because it is impossible to compose the existing variety of
-   --  Analyze/Resolve (and their wrappers, e.g. Preanalyze_Spec_Expression)
-   --  to achieve the desired semantics.
+   ----------------------------------------------
+   -- Preanalyze_And_Resolve_Assert_Expression --
+   ----------------------------------------------
 
-   procedure Preanalyze_Assert_Expression (N : Node_Id) is
-      Save_In_Spec_Expression : constant Boolean := In_Spec_Expression;
-      Save_Full_Analysis      : constant Boolean := Full_Analysis;
-
+   procedure Preanalyze_And_Resolve_Assert_Expression (N : Node_Id) is
    begin
       In_Assertion_Expr  := In_Assertion_Expr + 1;
-      In_Spec_Expression := True;
-      Full_Analysis      := False;
-      Expander_Mode_Save_And_Set (False);
-
-      if GNATprove_Mode then
-         Analyze_And_Resolve (N);
-      else
-         Analyze_And_Resolve (N, Suppress => All_Checks);
-      end if;
-
-      Expander_Mode_Restore;
-      Full_Analysis      := Save_Full_Analysis;
-      In_Spec_Expression := Save_In_Spec_Expression;
+      Preanalyze_And_Resolve_Spec_Expression (N);
       In_Assertion_Expr  := In_Assertion_Expr - 1;
-   end Preanalyze_Assert_Expression;
+   end Preanalyze_And_Resolve_Assert_Expression;
 
-   -----------------------------------
-   -- Preanalyze_Default_Expression --
-   -----------------------------------
+   -----------------------------------------------
+   -- Preanalyze_And_Resolve_Default_Expression --
+   -----------------------------------------------
 
-   procedure Preanalyze_Default_Expression (N : Node_Id; T : Entity_Id) is
+   procedure Preanalyze_And_Resolve_Default_Expression
+      (N : Node_Id;
+       T : Entity_Id)
+   is
       Save_In_Default_Expr : constant Boolean := In_Default_Expr;
    begin
       In_Default_Expr := True;
-      Preanalyze_Spec_Expression (N, T);
+      Preanalyze_And_Resolve_Spec_Expression (N, T);
       In_Default_Expr := Save_In_Default_Expr;
-   end Preanalyze_Default_Expression;
+   end Preanalyze_And_Resolve_Default_Expression;
 
-   --------------------------------
-   -- Preanalyze_Spec_Expression --
-   --------------------------------
+   --------------------------------------------
+   -- Preanalyze_And_Resolve_Spec_Expression --
+   --------------------------------------------
 
-   procedure Preanalyze_Spec_Expression (N : Node_Id; T : Entity_Id) is
+   procedure Preanalyze_And_Resolve_Spec_Expression
+     (N : Node_Id;
+      T : Entity_Id)
+   is
       Save_In_Spec_Expression : constant Boolean := In_Spec_Expression;
    begin
       In_Spec_Expression := True;
       Preanalyze_And_Resolve (N, T);
       In_Spec_Expression := Save_In_Spec_Expression;
-   end Preanalyze_Spec_Expression;
+   end Preanalyze_And_Resolve_Spec_Expression;
+
+   --------------------------------------------
+   -- Preanalyze_And_Resolve_Spec_Expression --
+   --------------------------------------------
+
+   procedure Preanalyze_And_Resolve_Spec_Expression (N : Node_Id) is
+      Save_In_Spec_Expression : constant Boolean := In_Spec_Expression;
+   begin
+      In_Spec_Expression := True;
+      Preanalyze_And_Resolve (N);
+      In_Spec_Expression := Save_In_Spec_Expression;
+   end Preanalyze_And_Resolve_Spec_Expression;
 
    ----------------------------------------
    -- Prepare_Private_Subtype_Completion --
@@ -21076,7 +21078,8 @@ package body Sem_Ch3 is
          --  Per-Object Expressions" in spec of package Sem).
 
          if Present (Expression (Discr)) then
-            Preanalyze_Default_Expression (Expression (Discr), Discr_Type);
+            Preanalyze_And_Resolve_Default_Expression
+              (Expression (Discr), Discr_Type);
 
             --  Legaity checks
 
@@ -23140,6 +23143,14 @@ package body Sem_Ch3 is
          end if;
 
          Propagate_Concurrent_Flags (T, Etype (Component));
+
+         --  Propagate information about constructor dependence
+
+         if Ekind (Etype (Component)) /= E_Void
+           and then Needs_Construction (Etype (Component))
+         then
+            Set_Needs_Construction (T);
+         end if;
 
          if Ekind (Component) /= E_Component then
             null;

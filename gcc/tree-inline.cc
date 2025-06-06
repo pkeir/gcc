@@ -2239,7 +2239,7 @@ copy_bb (copy_body_data *id, basic_block bb,
 		}
 	      else if (nargs != 0)
 		{
-		  tree newlhs = create_tmp_reg_or_ssa_name (integer_type_node);
+		  tree newlhs = make_ssa_name (integer_type_node);
 		  count = build_int_cst (integer_type_node, nargs);
 		  new_stmt = gimple_build_assign (gimple_call_lhs (stmt),
 						  PLUS_EXPR, newlhs, count);
@@ -2866,7 +2866,6 @@ initialize_cfun (tree new_fndecl, tree callee_fndecl, profile_count count)
   cfun->nonlocal_goto_save_area = src_cfun->nonlocal_goto_save_area;
   cfun->function_end_locus = src_cfun->function_end_locus;
   cfun->curr_properties = src_cfun->curr_properties;
-  cfun->last_verified = src_cfun->last_verified;
   cfun->va_list_gpr_size = src_cfun->va_list_gpr_size;
   cfun->va_list_fpr_size = src_cfun->va_list_fpr_size;
   cfun->has_nonlocal_label = src_cfun->has_nonlocal_label;

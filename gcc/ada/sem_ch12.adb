@@ -276,6 +276,7 @@ package body Sem_Ch12 is
    --                                Pre
    --                                Pre_Class
    --                                Precondition
+   --                                Program_Exit
    --                                Refined_Depends
    --                                Refined_Global
    --                                Refined_Post
@@ -3371,7 +3372,7 @@ package body Sem_Ch12 is
          end if;
 
          if Present (E) then
-            Preanalyze_Spec_Expression (E, T);
+            Preanalyze_And_Resolve_Spec_Expression (E, T);
 
             --  The default for a ghost generic formal IN parameter of
             --  access-to-variable type should be a ghost object (SPARK
@@ -4195,7 +4196,7 @@ package body Sem_Ch12 is
       elsif Present (Expr) then
          Push_Scope (Nam);
          Install_Formals (Nam);
-         Preanalyze_Spec_Expression (Expr, Etype (Nam));
+         Preanalyze_And_Resolve_Spec_Expression (Expr, Etype (Nam));
          End_Scope;
       end if;
 
@@ -13033,10 +13034,6 @@ package body Sem_Ch12 is
          Act_Body_Id :=
            Make_Defining_Identifier (Sloc (Act_Decl_Id), Chars (Act_Decl_Id));
          Preserve_Comes_From_Source (Act_Body_Id, Act_Decl_Id);
-
-         --  Some attributes of spec entity are not inherited by body entity
-
-         Set_Handler_Records (Act_Body_Id, No_List);
 
          if Nkind (Defining_Unit_Name (Act_Spec)) =
                                            N_Defining_Program_Unit_Name

@@ -721,6 +721,14 @@ enum gfc_isym_id
      remains compatible.  */
   GFC_ISYM_SU_KIND,
   GFC_ISYM_UINT,
+
+  GFC_ISYM_ACOSPI,
+  GFC_ISYM_ASINPI,
+  GFC_ISYM_ATANPI,
+  GFC_ISYM_ATAN2PI,
+  GFC_ISYM_COSPI,
+  GFC_ISYM_SINPI,
+  GFC_ISYM_TANPI,
 };
 
 enum init_local_logical
@@ -3294,8 +3302,10 @@ typedef struct
   int flag_init_logical;
   int flag_init_character;
   char flag_init_character_value;
-  bool disable_omp_is_initial_device;
-  bool disable_acc_on_device;
+  bool disable_omp_is_initial_device:1;
+  bool disable_omp_get_initial_device:1;
+  bool disable_omp_get_num_devices:1;
+  bool disable_acc_on_device:1;
 
   int fpe;
   int fpe_summary;

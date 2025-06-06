@@ -3682,6 +3682,13 @@ vect_analyze_data_ref_accesses (vec_info *vinfo,
 		      != type_size_a))
 		break;
 
+	      /* For datarefs with big gap, it's better to split them into different
+		 groups.
+		 .i.e a[0], a[1], a[2], .. a[7], a[100], a[101],..., a[107]  */
+	      if ((unsigned HOST_WIDE_INT)(init_b - init_prev)
+		  > MAX_BITSIZE_MODE_ANY_MODE / BITS_PER_UNIT)
+		break;
+
 	      /* If the step (if not zero or non-constant) is smaller than the
 		 difference between data-refs' inits this splits groups into
 		 suitable sizes.  */
@@ -7242,7 +7249,8 @@ vect_can_force_dr_alignment_p (const_tree decl, poly_uint64 alignment)
     return false;
 
   if (decl_in_symtab_p (decl)
-      && !symtab_node::get (decl)->can_increase_alignment_p ())
+      && (!symtab_node::get (decl)
+	  || !symtab_node::get (decl)->can_increase_alignment_p ()))
     return false;
 
   if (TREE_STATIC (decl))
